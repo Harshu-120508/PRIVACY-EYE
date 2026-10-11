@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  // Standalone output is only needed for the Docker image; Netlify uses its own adapter.
+  output: process.env.NETLIFY ? undefined : 'standalone',
   reactStrictMode: true,
   images: {
     domains: ['localhost'],
