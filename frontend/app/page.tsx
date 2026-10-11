@@ -26,7 +26,7 @@ import { GlassButton } from '@/components/ui/GlassButton'
 import { GlassBadge } from '@/components/ui/GlassBadge'
 import { PrivacyGlowButton } from '@/components/core/privacy-glow-button'
 import { Footer } from '@/components/layout/Footer'
-import { Hero3DScene } from '@/components/landing/Hero3DScene'
+import { Hero2DDisplay } from '@/components/landing/Hero2DDisplay'
 import { authApi, getErrorMessage } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { useRouter } from 'next/navigation'
@@ -134,10 +134,10 @@ export default function LandingPage() {
 
           {/* Centered navigation items */}
           <nav className="hidden md:flex items-center gap-6 text-xs font-semibold tracking-wide text-white/70">
-            <a href="#hero-3d" className="hover:text-white transition-colors">
-              Authenticity 3D
+            <a href="#hero" className="hover:text-white transition-colors">
+              Authenticity Engine
             </a>
-            <a href="#features-3d" className="hover:text-white transition-colors">
+            <a href="#features" className="hover:text-white transition-colors">
               Forensic Engines
             </a>
             <a href="#architecture" className="hover:text-white transition-colors">
@@ -174,8 +174,8 @@ export default function LandingPage() {
         </motion.div>
       </header>
 
-      {/* ── HERO 3D INTERACTIVE EXPERIENCE (Section 11 & User Reference Photo) ── */}
-      <section id="hero-3d" className="relative pt-32 md:pt-40 pb-16 px-4 md:px-8 max-w-7xl mx-auto w-full flex flex-col items-center text-center">
+      {/* ── HERO 2D FORENSIC SUITE ── */}
+      <section id="hero" className="relative pt-32 md:pt-40 pb-16 px-4 md:px-8 max-w-7xl mx-auto w-full flex flex-col items-center text-center">
         {/* Top Badge */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
@@ -186,7 +186,7 @@ export default function LandingPage() {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-cyan opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-cyan" />
           </span>
-          <span>INTERACTIVE 3D PARALLAX · MOVE CURSOR & SCROLL</span>
+          <span>MULTI-SIGNAL BIOMETRICS · REAL-TIME AI FORENSICS</span>
         </motion.div>
 
         {/* Main Title */}
@@ -213,45 +213,41 @@ export default function LandingPage() {
           and forensic analysis built for the AI era.
         </motion.p>
 
-        {/* ── THE 3D SCENE (With Floating Glass Cards, Curvilinear Ribbons, and Cursor Parallax) ── */}
+        {/* ── THE 2D BIOMETRIC DISPLAY ── */}
         <div className="w-full mt-6">
-          <Hero3DScene />
+          <Hero2DDisplay />
         </div>
       </section>
 
-      {/* ── 3D INTERACTIVE FEATURE MATRICES (Section 19 & 30) ── */}
-      <section id="features-3d" className="py-24 px-4 md:px-8 max-w-7xl mx-auto w-full space-y-12">
+      {/* ── MULTI-SIGNAL FORENSIC ENGINE MATRICES ── */}
+      <section id="features" className="py-24 px-4 md:px-8 max-w-7xl mx-auto w-full space-y-12">
         <div className="text-center max-w-3xl mx-auto space-y-3">
           <span className="text-xs font-mono uppercase tracking-widest text-brand-cyan">
             Multi-Signal Forensic Defense
           </span>
           <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight text-white">
-            Click Any Engine for 3D Forensic Inspection
+            Forensic Engine Inspection
           </h2>
           <p className="text-sm text-white/60 leading-relaxed">
-            Click on any forensic card below to open its real-time mathematical formulation,
-            sensor telemetry, and active detection pipeline.
+            Inspect real-time mathematical formulations, sensor telemetry, and active
+            detection pipelines for each forensic neural engine.
           </p>
         </div>
 
-        {/* Interactive 3D Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" style={{ perspective: '1000px' }}>
+        {/* Interactive 2D Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {FEATURES.map((feat) => {
             const Icon = feat.icon
             return (
               <motion.div
                 key={feat.id}
                 whileHover={{
-                  scale: 1.04,
-                  rotateX: 6,
-                  rotateY: -4,
-                  translateZ: 25,
-                  transition: { duration: 0.25 },
+                  y: -4,
+                  transition: { duration: 0.2 },
                 }}
-                whileTap={{ scale: 0.96 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => setSelectedFeature(feat)}
                 className="relative rounded-3xl p-6 glass-floating border border-white/12 shadow-glass hover:border-brand-cyan/40 cursor-pointer overflow-hidden group text-left transition-colors"
-                style={{ transformStyle: 'preserve-3d' }}
               >
                 {/* Background ambient corner flare */}
                 <div
@@ -297,17 +293,16 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── 3D MODAL: FEATURE DETAIL INSPECTOR ── */}
+      {/* ── MODAL: FEATURE DETAIL INSPECTOR ── */}
       <AnimatePresence>
         {selectedFeature && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-2xl">
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, rotateX: 12 }}
-              animate={{ opacity: 1, scale: 1, rotateX: 0 }}
-              exit={{ opacity: 0, scale: 0.9, rotateX: 12 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="w-full max-w-2xl rounded-4xl glass-floating border border-white/20 p-8 md:p-10 space-y-6 shadow-glass-floating relative overflow-hidden text-left"
-              style={{ perspective: '1200px' }}
             >
               {/* Top ambient color glow */}
               <div
@@ -384,15 +379,15 @@ export default function LandingPage() {
         )}
       </AnimatePresence>
 
-      {/* ── 3D MODAL: FAST AUTHENTICATION DIALOG (Login & Sign Up) ── */}
+      {/* ── MODAL: FAST AUTHENTICATION DIALOG (Login & Sign Up) ── */}
       <AnimatePresence>
         {authModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-2xl">
             <motion.div
-              initial={{ opacity: 0, scale: 0.92, rotateY: 15 }}
-              animate={{ opacity: 1, scale: 1, rotateY: 0 }}
-              exit={{ opacity: 0, scale: 0.92, rotateY: 15 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="w-full max-w-md rounded-4xl glass-floating border border-white/20 p-8 space-y-6 shadow-glass-floating relative text-left"
             >
               <div className="flex items-center justify-between pb-3 border-b border-white/8">

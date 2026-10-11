@@ -1,8 +1,21 @@
 import type { Metadata } from 'next'
+import { Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
 import { AmbientBackground } from '@/components/layout/AmbientBackground'
 import { AuthProvider } from '@/contexts/AuthContext'
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-sans',
+})
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-mono',
+})
 
 export const metadata: Metadata = {
   title: { default: 'Privacy Eye — See Through The Fake', template: '%s | Privacy Eye' },
@@ -12,16 +25,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="bg-canvas text-white font-sans antialiased selection:bg-brand-blue/30 selection:text-white">
+    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+      <body className="bg-canvas text-white font-sans antialiased selection:bg-brand-cyan/30 selection:text-white">
         <AmbientBackground />
         <AuthProvider>
           <div className="relative z-10 min-h-screen flex flex-col">
