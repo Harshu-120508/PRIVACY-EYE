@@ -12,6 +12,7 @@ import {
   Zap,
   BarChart3,
   Lock,
+  Info,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { GlassCard } from '@/components/ui/GlassCard'
@@ -29,14 +30,18 @@ export default function SecurityCenterPage() {
   const [healthData, setHealthData] = useState<HealthResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastCheck, setLastCheck] = useState<string>('')
+  const [latencyMs, setLatencyMs] = useState<number | null>(null)
 
   const fetchHealth = async () => {
     setLoading(true)
+    const t0 = performance.now()
     try {
       const res = await api.get('/health')
+      setLatencyMs(Math.round(performance.now() - t0))
       setHealthData(res.data)
       setLastCheck(new Date().toLocaleTimeString())
     } catch {
+      setLatencyMs(Math.round(performance.now() - t0))
       setHealthData({ status: 'degraded', version: '1.0.0-mvp', env: 'development' })
       setLastCheck(new Date().toLocaleTimeString())
     } finally {
@@ -125,13 +130,15 @@ export default function SecurityCenterPage() {
         <GlassCard variant="elevated" className="p-5 space-y-3">
           <div className="flex items-center justify-between">
             <Activity className="w-5 h-5 text-status-safe" />
-            <span className="text-[10px] font-mono text-white/40">Ping: 8ms</span>
+            <span className="text-[10px] font-mono text-white/40">
+              {latencyMs !== null ? `Ping: ${latencyMs}ms` : 'Measuring...'}
+            </span>
           </div>
           <div>
             <span className="text-xs font-mono uppercase text-white/50 block">Last Verification</span>
             <p className="text-xl font-bold text-white mt-0.5">{lastCheck || 'Just now'}</p>
           </div>
-          <p className="text-[11px] text-white/40 font-mono">All health checks passing</p>
+          <p className="text-[11px] text-white/40 font-mono">Live gateway latency measured</p>
         </GlassCard>
       </div>
 
@@ -175,17 +182,28 @@ export default function SecurityCenterPage() {
         </div>
       </GlassCard>
 
-      {/* ── MODEL PERFORMANCE & EVALUATION MATRIX (Section 30 requirement) ── */}
+      {/* ── ACADEMIC BENCHMARK VALIDATION BASELINES ── */}
       <GlassCard variant="elevated" className="p-6 md:p-8 space-y-6">
-        <div className="flex items-center justify-between pb-3 border-b border-white/6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/6">
           <div className="flex items-center gap-3">
             <BarChart3 className="w-5 h-5 text-status-safe" />
             <div>
-              <h2 className="text-base font-bold text-white">Model Evaluation Metrics</h2>
-              <p className="text-xs text-white/50">Rigorous disjoint cross-dataset benchmark evaluation</p>
+              <h2 className="text-base font-bold text-white">Academic Benchmark Reference Standards</h2>
+              <p className="text-xs text-white/50">Disjoint cross-dataset validation on FaceForensics++ & Celeb-DF v2 test splits</p>
             </div>
           </div>
-          <GlassBadge status="safe" label="CALIBRATED" />
+          <GlassBadge status="brand" label="ACADEMIC BASELINE" />
+        </div>
+
+        {/* Scientific Transparency Notice */}
+        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/8 text-xs text-white/70 leading-relaxed space-y-1">
+          <div className="flex items-center gap-2 text-brand-cyan font-semibold font-mono text-[11px] uppercase tracking-wider">
+            <Info className="w-3.5 h-3.5" />
+            <span>Benchmark Protocol Transparency</span>
+          </div>
+          <p>
+            The metrics below represent academic benchmark baselines published on standardized evaluation splits (FaceForensics++ c23 and Celeb-DF v2). They provide comparative research reference standards rather than runtime operational guarantees. Production performance varies based on video resolution, lens distortion, ambient lighting, and compression bitrate.
+          </p>
         </div>
 
         {/* Core Statistical Gauges */}
@@ -219,15 +237,15 @@ export default function SecurityCenterPage() {
             <span className="text-lg font-bold font-mono text-status-safe">3.1%</span>
           </div>
           <div className="p-3 rounded-2xl bg-white/4 border border-white/6">
-            <span className="text-[10px] font-mono text-white/40 uppercase block">Avg Latency</span>
-            <span className="text-lg font-bold font-mono text-brand-cyan">&lt;16ms</span>
+            <span className="text-[10px] font-mono text-white/40 uppercase block">Test Split</span>
+            <span className="text-sm font-bold font-mono text-brand-cyan mt-1 block">FF++ c23</span>
           </div>
         </div>
 
         {/* Robustness Distribution Categories */}
         <div className="space-y-3 pt-2">
           <span className="text-xs font-mono uppercase tracking-wider text-white/50 block">
-            Robustness Stress Testing Across Unseen Distributions
+            Academic Generalization Across Unseen Test Distributions
           </span>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
             <div className="p-3 rounded-2xl bg-white/3 border border-white/6 flex justify-between">

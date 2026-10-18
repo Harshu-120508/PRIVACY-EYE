@@ -109,7 +109,7 @@ export default function AnalysisDetailPage() {
   }
 
   const risk = RISK_CONFIG[analysis.risk_level || 'UNDETERMINED']
-  const confValue = analysis.confidence !== null ? Math.round(analysis.confidence * 100) : 75
+  const confValue = analysis.confidence !== null ? Math.round(analysis.confidence * 100) : 0
   const synthValue =
     analysis.synthetic_probability !== null ? Math.round(analysis.synthetic_probability * 100) : 0
 

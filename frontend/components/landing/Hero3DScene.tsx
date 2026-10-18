@@ -211,12 +211,11 @@ export const Hero3DScene: React.FC = () => {
             </div>
 
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-white">98.4%</span>
-              <span className="text-[10px] text-white/50 font-mono">Micro-Motion Vitality</span>
+              <span className="text-xl font-bold font-mono text-white">5-POINT TRACKING</span>
             </div>
 
             <p className="text-[11px] text-white/60 leading-snug">
-              5-point landmark vector tracking with smooth physiological blink rate.
+              Continuous landmark vector tracking with smooth physiological micro-motion estimation.
             </p>
 
             <div className="pt-1 flex items-center gap-2 text-[10px] font-mono text-brand-blue">
@@ -259,13 +258,13 @@ export const Hero3DScene: React.FC = () => {
               <span className="text-[10px] font-mono uppercase tracking-wider text-brand-violet">
                 Silent-Face PAD
               </span>
-              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-status-safe/20 text-status-safe border border-status-safe/30">
-                0.02 SPOOF
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-brand-violet/20 text-brand-violet border border-brand-violet/30">
+                2D-FFT SPECTRA
               </span>
             </div>
 
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-status-safe">GENUINE SKIN</span>
+              <span className="text-xl font-bold font-mono text-white">FOURIER PAD ENGINE</span>
             </div>
 
             <p className="text-[11px] text-white/60 leading-snug">
@@ -320,22 +319,22 @@ export const Hero3DScene: React.FC = () => {
           <div className="relative z-10 space-y-3 text-left">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-mono uppercase tracking-wider text-white/50">
-                FaceForensics++
+                Spatial Forensics
               </span>
               <span className="text-[10px] font-mono font-bold text-brand-blue">ELA / DCT</span>
             </div>
 
             <div className="flex items-baseline gap-2">
-              <span className="text-xl font-bold font-mono text-white">ZERO SEAMS</span>
+              <span className="text-xl font-bold font-mono text-white">DCT RESIDUAL ANALYSIS</span>
             </div>
 
             <p className="text-[11px] text-white/60 leading-snug">
-              Boundary chroma gradients verified. No splice mask blending artifacts.
+              Discrete Cosine Transform error analysis inspecting boundary chroma and compression inconsistencies.
             </p>
 
             <div className="pt-1 flex items-center gap-2 text-[10px] font-mono text-status-safe">
               <Activity className="w-3.5 h-3.5" />
-              <span>Chroma Gradient Clean</span>
+              <span>Chroma Gradient Inspection</span>
             </div>
           </div>
         </motion.div>
@@ -371,22 +370,22 @@ export const Hero3DScene: React.FC = () => {
           <div className="relative z-10 space-y-3 text-left">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-mono uppercase tracking-wider text-brand-cyan">
-                FFHQ Baseline
+                Texture Variance
               </span>
               <span className="w-2 h-2 rounded-full bg-brand-cyan shadow-[0_0_8px_#38BDF8]" />
             </div>
 
             <div className="flex items-baseline gap-2">
-              <span className="text-xl font-bold font-mono text-white">ORGANIC TEXTURE</span>
+              <span className="text-xl font-bold font-mono text-white">LAPLACIAN & GAUSSIAN</span>
             </div>
 
             <p className="text-[11px] text-white/60 leading-snug">
-              Micro-vascular blood volume optical flux confirms live biological tissue.
+              Evaluates high-frequency gradient variance to detect synthetic GAN smoothing and diffusion blurring.
             </p>
 
             <div className="pt-1 flex items-center gap-2 text-[10px] font-mono text-white/50">
               <Cpu className="w-3.5 h-3.5 text-brand-cyan" />
-              <span>Ocular Synthesis Clean</span>
+              <span>Edge Density Consistency</span>
             </div>
           </div>
         </motion.div>
@@ -437,16 +436,14 @@ export const Hero3DScene: React.FC = () => {
             </div>
 
             {/* Central Calibrated Readout Badge */}
-            <div className="p-4 rounded-3xl glass-surface border border-white/10 w-full max-w-xs space-y-1">
+            <div className="p-4 rounded-3xl glass-surface border border-white/10 w-full max-w-xs space-y-2">
               <div className="flex items-center justify-between text-xs font-mono">
-                <span className="text-white/50">CONFIDENCE:</span>
-                <span className="text-status-safe font-bold">96.8% LIKELY HUMAN</span>
+                <span className="text-white/50">SYSTEM STATUS:</span>
+                <span className="text-status-safe font-bold">READY FOR INGESTION</span>
               </div>
-              <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-brand-blue to-status-safe rounded-full"
-                  style={{ width: '96.8%' }}
-                />
+              <div className="flex items-center justify-between text-[11px] font-mono text-white/70">
+                <span>PRIVACY GUARANTEE:</span>
+                <span className="text-brand-cyan font-semibold">EPHEMERAL RAM BUFFER</span>
               </div>
             </div>
 

@@ -51,7 +51,7 @@ const FEATURES: FeatureDetail[] = [
     description:
       'Detects micro-motion dynamics across eyes, nose tip, and mouth corners. Fuses 3D head yaw/pitch trajectory with biological blink rates to invalidate 2D photo cutouts and silicone presentation attacks.',
     metrics: ['Sub-12ms Inference Latency', 'Continuous Pose Estimation', 'Laplacian Clarity Gating'],
-    liveState: 'ACTIVE · 98.4% CONFIDENCE',
+    liveState: 'PIPELINE ACTIVE · ON-DEVICE YUNET',
   },
   {
     id: 'silentface',
@@ -62,7 +62,7 @@ const FEATURES: FeatureDetail[] = [
     description:
       'Transforms facial patches into frequency domains. Electronic screens (OLED, LCD, tablets) and printed paper emit distinct periodic moiré lattice spikes that are absent in natural human skin reflectance.',
     metrics: ['Dual-Scale Frequency Decomposition', 'Screen Moiré Suppression', 'Hard-Negative Replay Gated'],
-    liveState: 'SAFE · 0.02 SPOOF PROBABILITY',
+    liveState: 'PIPELINE ACTIVE · 2D-FFT SPECTRA',
   },
   {
     id: 'forensics',
@@ -73,18 +73,18 @@ const FEATURES: FeatureDetail[] = [
     description:
       'Inspects spatial compression artifacts and discrete cosine transform (DCT) coefficients. Identifies re-compression boundaries and blending seams typical of deepfake autoencoders and face-swapping algorithms.',
     metrics: ['Error Level Analysis (ELA)', 'Chroma Subsampling Checks', 'Zero-Seam Boundary Verification'],
-    liveState: 'CLEAN · NO COMPOSITE RESIDUE',
+    liveState: 'PIPELINE ACTIVE · DCT / ELA RESIDUALS',
   },
   {
     id: 'celebdf',
-    title: 'Celeb-DF & FFHQ Realism',
-    subtitle: 'Ocular Synthesis & Skin Texture Realism',
+    title: 'Spatial Texture & Boundary Analysis',
+    subtitle: 'High-Frequency Gradient & Diffusion Artifact Detection',
     icon: Sparkles,
     color: '#4ADE80',
     description:
-      'Deep evaluation of corneal light reflection consistency, iris micro-jitter, and high-frequency biological skin pores matching the FFHQ organic baseline distribution.',
-    metrics: ['Corneal Reflection Parallax', 'Biological Micro-Vascular Flux', 'FFHQ Organic Baseline'],
-    liveState: 'VALIDATED · HIGH BIOLOGICAL REALISM',
+      'Deep evaluation of high-frequency texture gradient variance, boundary blending discontinuities, and ocular synthesis symmetry against organic photographic reference distributions.',
+    metrics: ['Laplacian Variance Gating', 'Boundary Chroma Continuity', 'Organic Gradient Consistency'],
+    liveState: 'PIPELINE ACTIVE · TEXTURE GRADIENTS',
   },
 ]
 

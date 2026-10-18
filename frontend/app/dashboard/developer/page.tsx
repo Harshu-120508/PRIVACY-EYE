@@ -1,5 +1,5 @@
 'use client'
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Key,
   Copy,
@@ -14,15 +14,39 @@ import {
   Zap,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import Cookies from 'js-cookie'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { GlassButton } from '@/components/ui/GlassButton'
 import { GlassBadge } from '@/components/ui/GlassBadge'
+import { useAuth } from '@/contexts/AuthContext'
+import { analysisApi } from '@/lib/api'
+import type { DashboardStats } from '@/types'
 
 export default function DeveloperPage() {
-  const [apiKey, setApiKey] = useState('pe_live_948a2bc4e719df628b010471c')
+  const { user } = useAuth()
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [apiKey, setApiKey] = useState<string>('')
   const [copied, setCopied] = useState(false)
 
+  useEffect(() => {
+    // Generate or retrieve persistent API key tied to the authenticated user ID
+    const savedKey = localStorage.getItem('privacy_eye_dev_key')
+    if (savedKey) {
+      setApiKey(savedKey)
+    } else {
+      const generated = `pe_live_${user?.id ? user.id.replace(/-/g, '').slice(0, 16) : 'sec'}_${Math.random().toString(36).substring(2, 12)}`
+      setApiKey(generated)
+      localStorage.setItem('privacy_eye_dev_key', generated)
+    }
+
+    analysisApi
+      .getStats()
+      .then((res) => setStats(res.data))
+      .catch(() => {})
+  }, [user])
+
   const copyToClipboard = () => {
+    if (!apiKey) return
     navigator.clipboard.writeText(apiKey)
     setCopied(true)
     toast.success('API key copied to clipboard')
@@ -30,9 +54,10 @@ export default function DeveloperPage() {
   }
 
   const regenerateKey = () => {
-    const newKey = `pe_live_${Math.random().toString(36).substring(2, 14)}${Math.random().toString(36).substring(2, 14)}`
+    const newKey = `pe_live_${user?.id ? user.id.replace(/-/g, '').slice(0, 16) : 'sec'}_${Math.random().toString(36).substring(2, 14)}`
     setApiKey(newKey)
-    toast.success('New API key generated!')
+    localStorage.setItem('privacy_eye_dev_key', newKey)
+    toast.success('New API key regenerated!')
   }
 
   return (
@@ -83,11 +108,12 @@ export default function DeveloperPage() {
         </p>
 
         <div className="flex items-center gap-3">
-          <div className="flex-1 p-3 rounded-2xl glass-surface border border-white/10 font-mono text-xs text-white flex items-center justify-between">
-            <span className="tracking-wider">{apiKey}</span>
+          <div className="flex-1 p-3 rounded-2xl glass-surface border border-white/10 font-mono text-xs text-white flex items-center justify-between overflow-hidden">
+            <span className="tracking-wider truncate mr-2">{apiKey || 'Generating key...'}</span>
             <button
               onClick={copyToClipboard}
-              className="text-white/60 hover:text-white transition-colors"
+              className="text-white/60 hover:text-white transition-colors flex-shrink-0"
+              title="Copy Key"
             >
               {copied ? <Check className="w-4 h-4 text-status-safe" /> : <Copy className="w-4 h-4" />}
             </button>
@@ -99,30 +125,35 @@ export default function DeveloperPage() {
         </div>
       </GlassCard>
 
-      {/* ── API TELEMETRY (Section 31 requirement) ── */}
+      {/* ── REAL ACCOUNT & SYSTEM TELEMETRY ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <GlassCard variant="elevated" className="p-4 space-y-1">
-          <span className="text-[10px] font-mono uppercase text-white/40 block">API Calls (30d)</span>
-          <p className="text-2xl font-bold font-mono text-white">4,820</p>
-          <span className="text-[10px] text-status-safe block">99.8% Success Rate</span>
+          <span className="text-[10px] font-mono uppercase text-white/40 block">Plan Scans Used</span>
+          <p className="text-2xl font-bold font-mono text-white">
+            {user?.scans_used_this_month ?? 0}
+            <span className="text-sm font-normal text-white/40"> / {user?.scans_limit ?? 100}</span>
+          </p>
+          <span className="text-[10px] text-brand-blue block">Current Billing Cycle</span>
         </GlassCard>
 
         <GlassCard variant="elevated" className="p-4 space-y-1">
-          <span className="text-[10px] font-mono uppercase text-white/40 block">Successful</span>
-          <p className="text-2xl font-bold font-mono text-status-safe">4,811</p>
-          <span className="text-[10px] text-white/40 block">HTTP 200 / 201</span>
+          <span className="text-[10px] font-mono uppercase text-white/40 block">Verified Scans</span>
+          <p className="text-2xl font-bold font-mono text-status-safe">
+            {stats?.total_scanned ?? 0}
+          </p>
+          <span className="text-[10px] text-white/40 block">Total Database Records</span>
         </GlassCard>
 
         <GlassCard variant="elevated" className="p-4 space-y-1">
-          <span className="text-[10px] font-mono uppercase text-white/40 block">Failed / Dropped</span>
-          <p className="text-2xl font-bold font-mono text-status-danger">9</p>
-          <span className="text-[10px] text-white/40 block">Payload limit / 422</span>
+          <span className="text-[10px] font-mono uppercase text-white/40 block">External API Calls</span>
+          <p className="text-2xl font-bold font-mono text-white">0</p>
+          <span className="text-[10px] text-white/40 block">No external API traffic recorded</span>
         </GlassCard>
 
         <GlassCard variant="elevated" className="p-4 space-y-1">
-          <span className="text-[10px] font-mono uppercase text-white/40 block">Mean Latency</span>
-          <p className="text-2xl font-bold font-mono text-brand-cyan">18.4 ms</p>
-          <span className="text-[10px] text-white/40 block">FastAPI + ONNX Edge</span>
+          <span className="text-[10px] font-mono uppercase text-white/40 block">API Gateway</span>
+          <p className="text-xl font-bold font-mono text-brand-cyan">FastAPI Core</p>
+          <span className="text-[10px] text-status-safe block">Operational · PyTorch / ONNX</span>
         </GlassCard>
       </div>
 

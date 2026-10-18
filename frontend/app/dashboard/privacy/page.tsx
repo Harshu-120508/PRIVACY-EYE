@@ -81,7 +81,18 @@ export default function PrivacyCenterPage() {
     ) {
       return
     }
-    toast.success('Purge command dispatched. Database audit records erased.')
+    try {
+      const res = await analysisApi.getHistory(1, 100)
+      const items = res.data.items || []
+      if (items.length === 0) {
+        toast.success('No analysis records found to purge.')
+        return
+      }
+      await Promise.all(items.map((item: any) => analysisApi.deleteAnalysis(item.id)))
+      toast.success(`Purge complete. ${items.length} analysis audit records erased.`)
+    } catch {
+      toast.error('Failed to execute purge request')
+    }
   }
 
   return (

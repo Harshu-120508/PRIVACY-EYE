@@ -92,9 +92,11 @@ export default function AssistantPage() {
           ? `Regarding "${selectedAnalysis.original_filename}": The media exhibited an anomalous spatial residual in high-frequency DCT blocks. Additionally, boundary edge gradients indicated potential blending or re-compression artifacts.`
           : 'When media is flagged as Suspicious, our classifiers detected anomalies such as artificial frequency periodicities in 2D-FFT or inconsistent illumination gradients across facial landmarks.'
         evidence = {
-          category: selectedAnalysis?.risk_level || 'SUSPICIOUS',
-          confidence: selectedAnalysis?.confidence ? `${Math.round(selectedAnalysis.confidence * 100)}%` : '78%',
-          recommendation: 'Request high-resolution source or execute active liveness verification.',
+          category: selectedAnalysis?.risk_level || 'N/A',
+          confidence: selectedAnalysis?.confidence != null ? `${Math.round(selectedAnalysis.confidence * 100)}%` : 'N/A (No media selected)',
+          recommendation: selectedAnalysis
+            ? 'Request high-resolution source or execute active liveness verification.'
+            : 'Select an analysis from the sidebar to inspect specific evidence.',
         }
       } else if (q.includes('fft') || q.includes('spectrum')) {
         replyContent =
