@@ -96,14 +96,27 @@ class TestBenchmarkForensics(unittest.TestCase):
         self.assertTrue(tex_res["has_corneal_glint"])
 
     def test_live_authenticity_engine_benchmark_integration(self):
+        from unittest.mock import patch
         _, buffer = cv2.imencode(".jpg", self.img)
         img_bytes = buffer.tobytes()
 
-        result = live_authenticity_engine.analyze_frame(
-            img_bytes=img_bytes,
-            session_id="test_benchmark_session",
-            run_challenge=False,
-        )
+        mock_face = {
+            "box": self.face_box,
+            "landmarks": {
+                "right_eye": [130, 140],
+                "left_eye": [190, 140],
+                "nose_tip": [160, 165],
+                "right_mouth": [140, 205],
+                "left_mouth": [180, 205],
+            },
+            "detector_confidence": 0.95,
+        }
+        with patch.object(live_authenticity_engine, "detect_face", return_value=mock_face):
+            result = live_authenticity_engine.analyze_frame(
+                img_bytes=img_bytes,
+                session_id="test_benchmark_session",
+                run_challenge=False,
+            )
 
         self.assertIn("benchmarks", result)
         self.assertIn("faceforensics", result["benchmarks"])

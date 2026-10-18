@@ -347,6 +347,7 @@ async def change_password(
 @router.post("/forgot-password")
 async def forgot_password(
     body: ForgotPasswordRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -368,15 +369,13 @@ async def forgot_password(
             action="PASSWORD_RESET_REQUESTED",
         ))
         await db.commit()
-        # In production, dispatch email with raw_reset link
+        if settings.APP_ENV != "production":
+            response.headers["X-Dev-Reset-Token"] = raw_reset
         logger.info("Password reset token generated", user_id=user.id)
 
-    resp = {
+    return {
         "message": "If an account exists for that email address, password reset instructions have been issued.",
     }
-    if user and user.is_active and settings.APP_ENV != "production":
-        resp["reset_token"] = raw_reset
-    return resp
 
 
 @router.post("/reset-password")
