@@ -137,9 +137,11 @@ interface LiveFrameResult {
   right_eye_visible?: boolean
   left_eye_quality?: number
   right_eye_quality?: number
-  // Blink & 25-Second Observation Engine
+  // Blink & 30-Second Observation Engine
   blink_status?: string
   blink_count?: number
+  show_blink_popup?: boolean
+  blink_reminder_active?: boolean
   seconds_since_last_blink?: number
   continuous_observation_sec?: number
   is_blink_timer_paused?: boolean
@@ -270,12 +272,16 @@ const REASON_CODE_MAP: Record<string, { label: string; severity: 'safe' | 'warni
     severity: 'safe',
   },
   BLINK_CHALLENGE_REQUESTED: {
-    label: '25s no-blink challenge active: Please blink once',
-    severity: 'warning',
+    label: '30s observation reminder: Please blink naturally',
+    severity: 'info',
+  },
+  BLINK_REMINDER_TRIGGERED: {
+    label: '30s observation reminder: Please blink naturally',
+    severity: 'info',
   },
   BLINK_CHALLENGE_FAILED: {
-    label: 'No blink verified in 25s — Liveness confidence capped (20-30%)',
-    severity: 'warning',
+    label: 'Awaiting natural blink to verify active presence',
+    severity: 'info',
   },
   MULTIPLE_FACES_DETECTED: {
     label: 'Multiple faces in frame — primary face tracked',
@@ -319,6 +325,35 @@ export default function LiveCameraScanPage() {
   const [consentStatus, setConsentStatus] = useState<'GRANTED' | 'DECLINED' | null>(null)
   const [trainingStats, setTrainingStats] = useState<TrainingStats | null>(null)
   const [savedReportId, setSavedReportId] = useState<string | null>(null)
+
+  // 30-Second No-Blink Reminder Modal State
+  const [dismissBlinkPopup, setDismissBlinkPopup] = useState(false)
+  const lastBlinkCountRef = useRef(0)
+
+  // Auto-dismiss blink reminder modal immediately whenever a new blink is detected
+  useEffect(() => {
+    if (analysisResult?.blink_count !== undefined) {
+      if (analysisResult.blink_count > lastBlinkCountRef.current) {
+        lastBlinkCountRef.current = analysisResult.blink_count
+        setDismissBlinkPopup(true)
+      } else if (analysisResult.blink_count === 0 && (analysisResult?.seconds_since_last_blink || 0) < 5) {
+        // Reset dismiss state on new session
+        setDismissBlinkPopup(false)
+      }
+    }
+  }, [analysisResult?.blink_count, analysisResult?.seconds_since_last_blink])
+
+  const shouldShowBlinkReminder = Boolean(
+    !dismissBlinkPopup &&
+    isCameraActive &&
+    analysisResult?.face_detected &&
+    (analysisResult?.show_blink_popup ||
+     analysisResult?.blink_reminder_active ||
+     (analysisResult?.blink_challenge?.active) ||
+     (analysisResult?.seconds_since_last_blink !== undefined &&
+      analysisResult.seconds_since_last_blink >= 30 &&
+      (analysisResult.blink_count || 0) === 0))
+  )
 
   // Load training stats
   const loadTrainingStats = async () => {
@@ -418,7 +453,7 @@ export default function LiveCameraScanPage() {
 
   useEffect(() => {
     if (!isCameraActive) return
-    const interval = setInterval(processFrame, 400) // Analysis at ~2.5 FPS
+    const interval = setInterval(processFrame, 220) // Fast sampling (~4.5 FPS) ensures human blinks (150-300ms) are reliably caught
     return () => clearInterval(interval)
   }, [isCameraActive, processFrame])
 
@@ -918,6 +953,38 @@ export default function LiveCameraScanPage() {
               </div>
             )}
 
+            {/* 30-Second No-Blink Reminder Modal/Banner (Requirement: Show popup without decreasing confidence) */}
+            {shouldShowBlinkReminder && (
+              <div className="absolute top-16 inset-x-4 sm:inset-x-8 z-30 flex justify-center animate-in fade-in slide-in-from-top-2 duration-300 pointer-events-auto">
+                <div className="w-full max-w-md p-4 rounded-2xl glass-card border border-brand-cyan/40 bg-canvas/92 backdrop-blur-2xl shadow-[0_0_25px_rgba(6,182,212,0.25)] flex items-start gap-3.5">
+                  <div className="w-9 h-9 rounded-xl bg-brand-cyan/20 border border-brand-cyan/40 flex items-center justify-center text-brand-cyan flex-shrink-0 animate-pulse">
+                    <Eye className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-white tracking-wide flex items-center gap-2">
+                        <span>Natural Blink Notice</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-brand-cyan animate-ping" />
+                      </h4>
+                      <span className="text-[10px] font-mono text-brand-cyan px-2 py-0.5 rounded-full bg-brand-cyan/10 border border-brand-cyan/30">
+                        30s Window
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/70 mt-1 leading-relaxed">
+                      Please blink naturally to verify continuous presence. (Confidence is not decreased).
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setDismissBlinkPopup(true)}
+                    className="text-white/40 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10 flex-shrink-0"
+                    title="Dismiss reminder"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Floating Glass Pill at Bottom (Matching Reference Screenshot Design) */}
             {isCameraActive && (
               <div className="absolute bottom-5 inset-x-0 z-20 flex justify-center px-4 pointer-events-none">
@@ -983,7 +1050,7 @@ export default function LiveCameraScanPage() {
               <span className="text-[10px] font-mono uppercase text-white/50 block">Eye Quality</span>
               <p className="text-xl font-bold font-mono text-white">
                 {analysisResult?.overall_eye_quality !== undefined
-                  ? `${analysisResult.overall_eye_quality}%`
+                  ? `${analysisResult.overall_eye_quality <= 1.0 ? Math.round(analysisResult.overall_eye_quality * 100) : Math.round(analysisResult.overall_eye_quality)}%`
                   : analysisResult?.quality?.sharpness_label || 'GOOD'}
               </p>
               <span className="text-[10px] text-white/40 block">
@@ -1003,7 +1070,7 @@ export default function LiveCameraScanPage() {
               <span className="text-[10px] text-white/40 block">
                 {analysisResult?.seconds_since_last_blink !== undefined
                   ? `Last: ${analysisResult.seconds_since_last_blink}s ago`
-                  : '25s Tracker'}
+                  : '30s Tracker'}
               </span>
             </GlassCard>
           </div>
@@ -1344,27 +1411,25 @@ export default function LiveCameraScanPage() {
             )}
           </GlassCard>
 
-          {/* ── DEDICATED BLINK ENGINE & 25-SECOND OBSERVATION CARD (Sections 13-23) ── */}
+          {/* ── DEDICATED BLINK ENGINE & 30-SECOND OBSERVATION CARD (Sections 13-23) ── */}
           <GlassCard variant="elevated" className="space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-white/6">
               <div className="flex items-center gap-2">
                 <Timer className="w-4 h-4 text-brand-blue" />
                 <h3 className="text-sm font-bold uppercase tracking-wider text-white">
-                  Blink & 25s Observation Engine
+                  Blink & 30s Observation Engine
                 </h3>
               </div>
               <span
                 className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
-                  analysisResult?.blink_status === 'CHALLENGE_ACTIVE'
+                  analysisResult?.show_blink_popup || analysisResult?.blink_reminder_active
                     ? 'bg-brand-cyan/20 text-brand-cyan border border-brand-cyan/40 animate-pulse'
-                    : analysisResult?.blink_status === 'CHALLENGE_FAILED'
-                    ? 'bg-status-warning/20 text-status-warning border border-status-warning/30'
                     : analysisResult?.is_blink_timer_paused
                     ? 'bg-white/10 text-white/50 border border-white/10'
                     : 'bg-status-safe/20 text-status-safe border border-status-safe/30'
                 }`}
               >
-                {analysisResult?.blink_status || 'STANDBY'}
+                {analysisResult?.show_blink_popup ? 'REMINDER_ACTIVE' : (analysisResult?.blink_status || 'STANDBY')}
               </span>
             </div>
 
@@ -1394,27 +1459,27 @@ export default function LiveCameraScanPage() {
                     ? `${Math.round(analysisResult.continuous_observation_sec)}s`
                     : '0s'}
                 </p>
-                <span className="text-[10px] text-white/50 block">/ 25s window</span>
+                <span className="text-[10px] text-white/50 block">/ 30s window</span>
               </div>
             </div>
 
-            {/* Timer Progress Bar towards 25-Second Observation Window */}
+            {/* Timer Progress Bar towards 30-Second Observation Window */}
             <div className="space-y-1.5">
               <div className="flex justify-between text-[10px] font-mono text-white/50">
                 <span>Observation Window Progress</span>
                 <span>
-                  {Math.round(Math.min(100, ((analysisResult?.continuous_observation_sec || 0) / 25.0) * 100))}%
+                  {Math.round(Math.min(100, ((analysisResult?.continuous_observation_sec || 0) / 30.0) * 100))}%
                 </span>
               </div>
               <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-300 ${
-                    (analysisResult?.continuous_observation_sec || 0) >= 20
+                    (analysisResult?.continuous_observation_sec || 0) >= 25
                       ? 'bg-status-warning'
                       : 'bg-brand-cyan'
                   }`}
                   style={{
-                    width: `${Math.min(100, Math.max(4, ((analysisResult?.continuous_observation_sec || 0) / 25.0) * 100))}%`,
+                    width: `${Math.min(100, Math.max(4, ((analysisResult?.continuous_observation_sec || 0) / 30.0) * 100))}%`,
                   }}
                 />
               </div>

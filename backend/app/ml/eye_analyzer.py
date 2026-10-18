@@ -26,7 +26,7 @@ class EyeAnalyzer:
     Evaluates left and right eye quality independently without assuming symmetry.
     """
 
-    def __init__(self, min_blur_var: float = 24.0, min_eye_size_px: int = 10):
+    def __init__(self, min_blur_var: float = 12.0, min_eye_size_px: int = 8):
         self.min_blur_var = min_blur_var
         self.min_eye_size_px = min_eye_size_px
 
@@ -90,10 +90,12 @@ class EyeAnalyzer:
         # Polarized/dark lenses: low luminance, low saturation, lack of sclera gradients
         is_sunglasses = (val_mean < 45.0 and sat_mean < 40.0) or (mean_lum < 50.0 and dynamic_range < 35.0)
 
-        # 5. Openness estimation: vertical Sobel energy + pupil valley
+        # 5. Openness estimation: vertical Sobel energy + contrast + pupil contrast
         sob_y = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
         vert_energy = float(np.mean(np.abs(sob_y)))
-        openness_score = (vert_energy * 0.65) + (contrast * 0.35)
+        min_10 = float(np.percentile(gray, 10))
+        pupil_contrast = max(0.0, mean_lum - min_10)
+        openness_score = (vert_energy * 0.45) + (contrast * 0.25) + (pupil_contrast * 0.30)
 
         # Calibrated 0.0 to 1.0 quality score
         q_sharp = min(1.0, lap_var / 80.0)

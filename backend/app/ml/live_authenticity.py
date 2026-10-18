@@ -131,12 +131,12 @@ class LiveAuthenticityEngine:
         # 1. Laplacian variance for blur
         lap = cv2.Laplacian(gray, cv2.CV_64F)
         lap_var = float(lap.var())
-        # Calibrated 0-100 score where ~250+ is crisp
-        sharpness_score = min(100.0, round((lap_var / 280.0) * 100.0, 1))
+        # Calibrated 0-100 score where ~120+ is crisp for standard 720p/480p webcams
+        sharpness_score = min(100.0, round((lap_var / 120.0) * 100.0, 1))
 
-        if sharpness_score >= 55.0:
+        if sharpness_score >= 45.0:
             sharpness_label = "SHARP"
-        elif sharpness_score >= 32.0:
+        elif sharpness_score >= 18.0:
             sharpness_label = "ACCEPTABLE"
         else:
             sharpness_label = "BLURRY"
@@ -548,8 +548,8 @@ class LiveAuthenticityEngine:
         else:
             baseline = max(openness, 15.0)
 
-        threshold_close = max(4.0, baseline * 0.62)
-        threshold_open = max(6.0, baseline * 0.82)
+        threshold_close = max(3.5, baseline * 0.74)
+        threshold_open = max(5.0, baseline * 0.84)
 
         b_state = self._session_blink_state[session_id]
         blinks_list = self._session_blinks[session_id]
@@ -563,10 +563,10 @@ class LiveAuthenticityEngine:
             # Eye was closed; check if it reopened (completing a blink)
             if openness >= threshold_open:
                 duration = now - b_state["closed_since"]
-                # Natural human blink duration is typically between 0.08s and 0.70s
-                if 0.08 <= duration <= 0.70:
-                    # Prevent duplicate registration within 0.35s
-                    if not blinks_list or (now - blinks_list[-1]) > 0.35:
+                # Natural human blink duration is typically between 0.04s and 1.00s
+                if 0.04 <= duration <= 1.00:
+                    # Prevent duplicate registration within 0.22s
+                    if not blinks_list or (now - blinks_list[-1]) > 0.22:
                         blinks_list.append(now)
                         if session_id in self._session_guided_tasks:
                             self._session_guided_tasks[session_id]["blink_count"] += 1
@@ -1313,7 +1313,26 @@ class LiveAuthenticityEngine:
             quality=quality,
         )
 
-        total_marked = guided_protocol["total_marked"]
+        # Unify blink counts between dedicated BlinkEngine and guided protocol
+        effective_blinks = max(int(blink_res["blink_count"]), int(guided_protocol["task_2_blinks"]["blink_count"]))
+        if session_id in self._session_guided_tasks:
+            self._session_guided_tasks[session_id]["blink_count"] = effective_blinks
+            if effective_blinks >= 3:
+                self._session_guided_tasks[session_id]["blinks_verified"] = True
+        guided_protocol["task_2_blinks"]["blink_count"] = effective_blinks
+        guided_protocol["task_2_blinks"]["marked"] = bool(effective_blinks >= 3)
+        if effective_blinks >= 3:
+            guided_protocol["task_2_blinks"]["label"] = f"Blinks Verified: {effective_blinks} blinks recorded (Target ≥ 3 achieved)"
+        else:
+            guided_protocol["task_2_blinks"]["label"] = f"{effective_blinks} / 3 blinks recorded (Awaiting {3 - effective_blinks} more blinks)"
+
+        total_marked = int(
+            (1 if guided_protocol["task_1_smile"]["marked"] else 0)
+            + (1 if guided_protocol["task_2_blinks"]["marked"] else 0)
+            + (1 if guided_protocol["task_3_rotation"]["marked"] else 0)
+        )
+        guided_protocol["total_marked"] = total_marked
+        guided_protocol["all_marked"] = bool(total_marked == 3)
 
         # Signal Telemetry
         fused_signals.append({
@@ -1330,8 +1349,8 @@ class LiveAuthenticityEngine:
         })
         fused_signals.append({
             "key": "blink_tracking",
-            "label": f"Blinks Recorded: {blink_res['blink_count']} (Last blink: {blink_res['seconds_since_last_blink']}s ago)",
-            "severity": "low" if (not blink_res["is_timer_paused"] or blink_res["blink_count"] > 0) else "medium",
+            "label": f"Blinks Recorded: {effective_blinks} (Last blink: {blink_res['seconds_since_last_blink']}s ago)",
+            "severity": "low" if (not blink_res["is_timer_paused"] or effective_blinks > 0) else "medium",
             "detail": f"Continuous observation: {blink_res['continuous_observation_sec']}s (Timer paused: {blink_res['is_timer_paused']})",
         })
 
@@ -1347,7 +1366,7 @@ class LiveAuthenticityEngine:
             "total_matches": total_marked,
             "all_matched": bool(total_marked == 3),
             "blinks": {
-                "count_10s": guided_protocol["task_2_blinks"]["blink_count"],
+                "count_10s": effective_blinks,
                 "matched": guided_protocol["task_2_blinks"]["marked"],
                 "label": guided_protocol["task_2_blinks"]["label"],
             },
@@ -1396,33 +1415,6 @@ class LiveAuthenticityEngine:
             )
             user_message = "A face appears to be displayed through a phone or electronic screen."
             reliability = "HIGH"
-
-        # ── CASE 4: 25-SECOND NO-BLINK CHALLENGE PROTOCOL ───────────────────
-        elif blink_res["challenge"]["active"]:
-            # Active "PLEASE BLINK" challenge countdown
-            calc_conf = 45.0 + time_flux
-            confidence = round(float(max(40.0, min(50.0, calc_conf))), 1)
-            assessment = "BLINK_CHALLENGE_REQUESTED"
-            category_label = "PLEASE BLINK"
-            explanation = (
-                "We haven't detected a clear blink in 25 seconds of clear observation. "
-                "Please blink once to continue verification."
-            )
-            user_message = "Please blink once to continue verification."
-            reliability = "MEDIUM"
-
-        elif blink_res["challenge"]["status"] == "FAILED":
-            # 25-second challenge failed without blink: enforce 20-30% liveness ceiling
-            confidence = round(float(min(28.0, 24.5 + time_flux)), 1)
-            liveness_score = round(confidence / 100.0, 3)
-            assessment = "UNABLE_TO_DETERMINE"
-            category_label = "Likely live human: Low reliability (No blink verified)"
-            explanation = (
-                "No clear blink was detected during the 25-second verification window. "
-                "Liveness confidence is calibrated to a low-certainty ceiling."
-            )
-            user_message = "A clear blink was not detected. Reliability has been reduced."
-            reliability = "LOW"
 
         # ── CASE 3: EYES BLURRY OR NOT VISIBLE ──────────────────────────────
         elif eye_res["is_blurry"] or eye_res["eye_status"] in (EYE_TOO_BLURRY, BOTH_EYES_NOT_VISIBLE, EYES_OBSCURED):
@@ -1525,15 +1517,13 @@ class LiveAuthenticityEngine:
             "left_eye_quality": eye_res["left_eye_quality"],
             "right_eye_quality": eye_res["right_eye_quality"],
             "blink_status": (
-                "CHALLENGE_ACTIVE"
-                if blink_res["challenge"]["active"]
-                else (
-                    "CHALLENGE_FAILED"
-                    if blink_res["challenge"]["status"] == "FAILED"
-                    else ("PAUSED" if blink_res["is_timer_paused"] else "TRACKING")
-                )
+                "REMINDER_ACTIVE"
+                if blink_res.get("show_popup", False)
+                else ("PAUSED" if blink_res["is_timer_paused"] else "TRACKING")
             ),
-            "blink_count": blink_res["blink_count"],
+            "blink_count": effective_blinks,
+            "show_blink_popup": bool(blink_res.get("show_popup", False)),
+            "blink_reminder_active": bool(blink_res.get("show_popup", False)),
             "seconds_since_last_blink": blink_res["seconds_since_last_blink"],
             "continuous_observation_sec": blink_res["continuous_observation_sec"],
             "is_blink_timer_paused": blink_res["is_timer_paused"],

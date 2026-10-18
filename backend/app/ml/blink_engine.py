@@ -1,23 +1,23 @@
 """
-Privacy Eye — Advanced Blink State Machine, Timer, & 25-Second Challenge Engine
-Enforces biological blink validation (80ms - 700ms), continuous observation qualification,
-and uncertainty-aware liveness ceiling constraints.
+Privacy Eye — Advanced Blink State Machine, Timer, & 30-Second Notification Engine
+Enforces biological blink validation, high-sensitivity temporal valley detection,
+and gentle notification without artificial confidence reduction.
 """
 import time
 import numpy as np
 from typing import Dict, Any, List, Optional, Tuple
 
-MIN_BLINK_DURATION = 0.08   # 80ms minimum for biological human blink
-MAX_BLINK_DURATION = 0.70   # 700ms maximum duration
-BLINK_REFRACTORY_PERIOD = 0.30  # 300ms refractory period between blinks
-OBSERVATION_CHALLENGE_THRESHOLD = 25.0  # 25 seconds of clear observation
-CHALLENGE_DURATION = 5.0    # 5 seconds to comply with "PLEASE BLINK"
+MIN_BLINK_DURATION = 0.04   # 40ms minimum duration for camera frame-rate tolerance
+MAX_BLINK_DURATION = 1.00   # 1000ms maximum duration (allows relaxed blinks)
+BLINK_REFRACTORY_PERIOD = 0.22  # 220ms refractory period between consecutive blinks
+OBSERVATION_CHALLENGE_THRESHOLD = 30.0  # 30 seconds notification threshold per user specification
 
 
 class BlinkEngine:
     """
     Session-aware temporal blink tracker.
-    Accounts only for time when eyes are clearly visible and stable.
+    Tracks eye closure and openness differentials with high sensitivity.
+    Does NOT penalize confidence when user blinks are spaced out.
     """
 
     def __init__(self):
@@ -39,13 +39,12 @@ class BlinkEngine:
                 "blink_history": [],
                 "openness_history": [],  # (timestamp, openness)
                 # State machine
-                "state": "OPEN",  # OPEN, POSSIBLE_CLOSURE, CLOSED
+                "state": "OPEN",  # OPEN, CLOSED
                 "closed_since": 0.0,
-                # 25-second Challenge state
+                # 30-second reminder state
                 "challenge_active": False,
-                "challenge_start_time": 0.0,
-                "challenge_status": None,  # None, "PENDING", "PASSED", "FAILED"
-                "liveness_ceiling": 1.0,   # Default no ceiling; drops to 0.28 if challenge fails
+                "challenge_status": None,  # None, "REMINDER", "PASSED"
+                "liveness_ceiling": 1.0,   # Always 1.0 (no confidence penalty)
             }
         return self._sessions[session_id]
 
@@ -73,55 +72,52 @@ class BlinkEngine:
         just_blinked = False
 
         # ── 1. Observation Qualification Check ──────────────────────────────
-        # Only increment observation time if eyes are clearly visible and not blurry
-        eye_quality = eye_analysis.get("overall_eye_quality", 0.0)
-        is_blurry = eye_analysis.get("is_blurry", False)
+        # Observation timer advances when face is present and eyes are not obscured/severely blurry
         is_obscured = eye_analysis.get("is_obscured", False)
-        eyes_visible = eye_analysis.get("left_eye_visible", False) or eye_analysis.get("right_eye_visible", False)
+        is_blurry = eye_analysis.get("is_blurry", False)
+        eye_status = eye_analysis.get("eye_status", "")
+        eye_quality = eye_analysis.get("overall_eye_quality", 0.5)
 
-        can_observe_eyes = (
-            face_detected
-            and eyes_visible
-            and not is_blurry
-            and not is_obscured
-            and eye_quality >= 0.35
-        )
+        is_severely_blurry = is_blurry and (eye_status in ("EYE_TOO_BLURRY", "BOTH_EYES_NOT_VISIBLE") or eye_quality < 0.20)
 
-        if can_observe_eyes:
+        if not face_detected:
+            sess["is_paused"] = True
+            sess["pause_reason"] = "FACE_NOT_IN_FRAME"
+        elif is_obscured:
+            sess["is_paused"] = True
+            sess["pause_reason"] = "EYES_OBSCURED"
+        elif is_severely_blurry:
+            sess["is_paused"] = True
+            sess["pause_reason"] = "EYES_TOO_BLURRY"
+        else:
             sess["is_paused"] = False
             sess["pause_reason"] = None
             sess["observation_seconds"] += dt
-        else:
-            sess["is_paused"] = True
-            if not face_detected:
-                sess["pause_reason"] = "FACE_NOT_IN_FRAME"
-            elif is_obscured:
-                sess["pause_reason"] = "EYES_OBSCURED"
-            elif is_blurry:
-                sess["pause_reason"] = "EYES_TOO_BLURRY"
-            else:
-                sess["pause_reason"] = "EYES_NOT_VISIBLE"
+
+        # Blink state machine tracks as long as face is in frame and eyes aren't obscured by dark lenses
+        can_observe_eyes = face_detected and not is_obscured
 
         # ── 2. Adaptive Openness Thresholds ─────────────────────────────────
         sess["openness_history"].append((now, openness))
         # Keep 15 seconds history
         sess["openness_history"] = [pt for pt in sess["openness_history"] if now - pt[0] <= 15.0]
 
-        if len(sess["openness_history"]) >= 6:
+        if len(sess["openness_history"]) >= 4:
             vals = [v for _, v in sess["openness_history"]]
             baseline = float(np.percentile(vals, 75))
         else:
             baseline = openness if openness > 0 else 18.0
 
         if baseline <= 1.0:
-            threshold_close = max(0.08, baseline * 0.58)
-            threshold_open = max(0.12, baseline * 0.80)
+            threshold_close = max(0.08, baseline * 0.74)
+            threshold_open = max(0.12, baseline * 0.84)
         else:
-            threshold_close = max(4.0, baseline * 0.60)
-            threshold_open = max(6.0, baseline * 0.82)
+            threshold_close = max(3.5, baseline * 0.74)
+            threshold_open = max(5.0, baseline * 0.84)
 
-        # ── 3. Biological Blink State Machine ───────────────────────────────
+        # ── 3. Biological Blink State Machine & Valley Detection ────────────
         if can_observe_eyes:
+            # Check A: Standard State Machine
             if sess["state"] == "OPEN":
                 if openness < threshold_close:
                     sess["state"] = "CLOSED"
@@ -129,9 +125,7 @@ class BlinkEngine:
             elif sess["state"] == "CLOSED":
                 if openness >= threshold_open:
                     duration = now - sess["closed_since"]
-                    # Biological human blink verification: 80ms <= duration <= 700ms
                     if MIN_BLINK_DURATION <= duration <= MAX_BLINK_DURATION:
-                        # Refractory period check: >= 300ms from last blink
                         if (
                             sess["last_blink_timestamp"] is None
                             or (now - sess["last_blink_timestamp"]) >= BLINK_REFRACTORY_PERIOD
@@ -141,55 +135,60 @@ class BlinkEngine:
                             sess["blink_history"].append(now)
                             just_blinked = True
                             reason_codes.append("BLINK_DETECTED")
-                            # If challenge was active, pass it!
-                            if sess["challenge_active"]:
-                                sess["challenge_active"] = False
-                                sess["challenge_status"] = "PASSED"
-                                sess["observation_seconds"] = 0.0  # Reset 25s timer on passed challenge
-                                sess["liveness_ceiling"] = 1.0     # Lift ceiling
-                                reason_codes.append("BLINK_CHALLENGE_PASSED")
+                            sess["challenge_active"] = False
+                            sess["challenge_status"] = "PASSED"
                     sess["state"] = "OPEN"
                 elif (now - sess["closed_since"]) > 1.2:
-                    # Eye closed for > 1.2s -> Prolonged closure / looking down (not a blink)
+                    # Prolonged closure / looked down for > 1.2s -> reset
                     sess["state"] = "OPEN"
-        else:
-            # If tracking was lost, reset state machine to prevent counting reconnection as blink
-            sess["state"] = "OPEN"
 
-        # ── 4. 25-Second No-Blink Challenge Protocol ────────────────────────
+            # Check B: High-Sensitivity Single-Frame V-Valley Detector
+            # Catches rapid blinks that occurred within a single sample interval
+            if not just_blinked and len(sess["openness_history"]) >= 3:
+                p_prev = sess["openness_history"][-3][1]
+                p_mid = sess["openness_history"][-2][1]
+                p_curr = sess["openness_history"][-1][1]
+
+                is_dip = (p_mid < threshold_close or p_mid <= p_prev * 0.76)
+                is_recovery = (p_curr >= threshold_open or p_curr >= p_mid * 1.20)
+
+                if is_dip and is_recovery:
+                    if (
+                        sess["last_blink_timestamp"] is None
+                        or (now - sess["last_blink_timestamp"]) >= BLINK_REFRACTORY_PERIOD
+                    ):
+                        sess["blink_count"] += 1
+                        sess["last_blink_timestamp"] = now
+                        sess["blink_history"].append(now)
+                        just_blinked = True
+                        reason_codes.append("BLINK_DETECTED")
+                        sess["challenge_active"] = False
+                        sess["challenge_status"] = "PASSED"
+                        sess["state"] = "OPEN"
+
+        # ── 4. 30-Second No-Blink Reminder Protocol ────────────────────────
+        # Requirement: If no blink in 30s, DO NOT decrease confidence; just show a popup/banner.
         seconds_since_last_blink = (
             (now - sess["last_blink_timestamp"])
             if sess["last_blink_timestamp"] is not None
             else sess["observation_seconds"]
         )
 
-        challenge_countdown = None
-
-        if (
-            sess["observation_seconds"] >= OBSERVATION_CHALLENGE_THRESHOLD
-            and (sess["last_blink_timestamp"] is None or (now - sess["last_blink_timestamp"]) >= OBSERVATION_CHALLENGE_THRESHOLD)
-        ):
-            if not sess["challenge_active"] and sess["challenge_status"] != "FAILED":
-                # Trigger the interactive challenge
-                sess["challenge_active"] = True
-                sess["challenge_start_time"] = now
-                sess["challenge_status"] = "ACTIVE"
-                reason_codes.append("BLINK_CHALLENGE_REQUESTED")
-
-        if sess["challenge_active"]:
-            elapsed = now - sess["challenge_start_time"]
-            remaining = max(0.0, CHALLENGE_DURATION - elapsed)
-            challenge_countdown = int(np.ceil(remaining))
-
-            if remaining <= 0.0:
-                # Challenge expired without a valid blink
+        show_popup = False
+        if seconds_since_last_blink >= OBSERVATION_CHALLENGE_THRESHOLD:
+            show_popup = True
+            reason_codes.append("BLINK_REMINDER_TRIGGERED")
+            user_guidance.append("Please blink naturally to verify active presence.")
+            sess["challenge_active"] = True
+            sess["challenge_status"] = "REMINDER"
+        else:
+            if sess["challenge_active"] and just_blinked:
                 sess["challenge_active"] = False
-                sess["challenge_status"] = "FAILED"
-                sess["liveness_ceiling"] = 0.28  # Strict 20-30% ceiling on liveness
-                reason_codes.append("BLINK_CHALLENGE_FAILED")
-                user_guidance.append(
-                    "No clear blink was detected during the verification window. Liveness confidence reduced."
-                )
+                sess["challenge_status"] = "PASSED"
+                sess["observation_seconds"] = 0.0
+
+        # Confidence is NEVER decreased; ceiling stays 1.0 always
+        sess["liveness_ceiling"] = 1.0
 
         # Rate evaluation in rolling 10 seconds
         recent_blinks = [t for t in sess["blink_history"] if now - t <= 10.0]
@@ -204,19 +203,19 @@ class BlinkEngine:
             "timer_pause_reason": sess["pause_reason"],
             "just_blinked": bool(just_blinked),
             "blinks_in_last_10s": int(blinks_10s),
+            "show_popup": bool(show_popup),
             "challenge": {
-                "active": bool(sess["challenge_active"]),
-                "status": sess["challenge_status"],
-                "countdown": challenge_countdown,
-                "label": "PLEASE BLINK" if sess["challenge_active"] else None,
+                "active": bool(show_popup),
+                "status": "REMINDER" if show_popup else ("PASSED" if sess["blink_count"] > 0 else None),
+                "countdown": None,
+                "label": "PLEASE BLINK" if show_popup else None,
                 "prompt": (
-                    "We haven't detected a clear blink in 25 seconds of clear observation. "
-                    "Please blink once to continue verification."
-                    if sess["challenge_active"]
+                    "No blink detected in 30 seconds. Please blink naturally to verify continuous presence."
+                    if show_popup
                     else None
                 ),
             },
-            "liveness_ceiling": float(sess["liveness_ceiling"]),
+            "liveness_ceiling": 1.0,
             "reason_codes": reason_codes,
             "user_guidance": user_guidance,
         }

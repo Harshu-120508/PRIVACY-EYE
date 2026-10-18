@@ -144,9 +144,10 @@ def test_blink_engine_pause_on_blurry_eyes():
     assert res["continuous_observation_sec"] == 0.0
 
 
-def test_blink_engine_25_second_challenge_trigger_and_failure():
+def test_blink_engine_30_second_reminder_without_confidence_decrease():
+    """Requirement: If eyes do not blink in 30s, do not decrease confidence, just show a popup/reminder."""
     engine = BlinkEngine()
-    session_id = "test_blink_sess_25s"
+    session_id = "test_blink_sess_30s"
 
     eye_data_open = {
         "eye_status": BOTH_EYES_VISIBLE,
@@ -162,25 +163,26 @@ def test_blink_engine_25_second_challenge_trigger_and_failure():
     # Initialize session
     engine.update(session_id, openness=0.32, eye_analysis=eye_data_open, face_detected=True)
 
-    # Set observation duration to threshold (25.5s) with 0 blinks
+    # Fast-forward observation to threshold (30.5s) with 0 blinks
     sess = engine._get_or_create_session(session_id)
-    sess["observation_seconds"] = 25.5
+    sess["observation_seconds"] = 30.5
     sess["blink_count"] = 0
 
-    # Next update frame must trigger the "PLEASE BLINK" challenge
+    # Next update frame must trigger the 30s gentle reminder popup
     res = engine.update(session_id, openness=0.32, eye_analysis=eye_data_open, face_detected=True)
+    assert res["show_popup"] is True
     assert res["challenge"]["active"] is True
-    assert res["challenge"]["status"] == "ACTIVE"
-    assert "BLINK_CHALLENGE_REQUESTED" in res["reason_codes"]
+    # Confidence MUST NOT be decreased (ceiling stays 1.0)
+    assert res["liveness_ceiling"] == 1.0
+    assert "BLINK_REMINDER_TRIGGERED" in res["reason_codes"]
 
-    # Fast-forward challenge timer past 5s duration without any blink
-    sess["challenge_start_time"] = time.time() - 6.0
-    res_expired = engine.update(session_id, openness=0.32, eye_analysis=eye_data_open, face_detected=True)
-
-    assert res_expired["challenge"]["active"] is False
-    assert res_expired["challenge"]["status"] == "FAILED"
-    assert res_expired["liveness_ceiling"] <= 0.30
-    assert "BLINK_CHALLENGE_FAILED" in res_expired["reason_codes"]
+    # When user blinks, reminder immediately resolves
+    sess["state"] = "CLOSED"
+    sess["closed_since"] = time.time() - 0.15
+    res_blinked = engine.update(session_id, openness=0.32, eye_analysis=eye_data_open, face_detected=True)
+    assert res_blinked["blink_count"] == 1
+    assert res_blinked["show_popup"] is False
+    assert res_blinked["challenge"]["active"] is False
 
 
 # ── 3. SCREEN DETECTOR TESTS ──────────────────────────────────────────────────
