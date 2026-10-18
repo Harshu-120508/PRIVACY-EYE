@@ -115,6 +115,12 @@ export const authApi = {
 
   deleteAccount: (password_confirmation: string) =>
     api.delete('/users/me', { data: { password_confirmation } }),
+
+  requestVerification: (email?: string) =>
+    api.post('/auth/request-verification', email ? { email } : {}),
+
+  verifyEmail: (token: string) =>
+    api.post('/auth/verify-email', { token }),
 }
 
 // ── Analysis ──────────────────────────────────────────────────────────────────
@@ -199,6 +205,23 @@ export const liveScanApi = {
   }) => api.post('/live/consent-response', payload),
 
   getTrainingStats: () => api.get('/live/training-stats'),
+}
+
+// ── Admin ────────────────────────────────────────────────────────────────────
+export const adminApi = {
+  getStats: () => api.get('/admin/stats'),
+  getUsers: (params?: { q?: string; role?: string; status?: string; limit?: number; offset?: number }) =>
+    api.get('/admin/users', { params }),
+  updateUserStatus: (userId: string, is_active: boolean) =>
+    api.patch(`/admin/users/${userId}/status`, { is_active }),
+  updateUserRole: (userId: string, role: string) =>
+    api.patch(`/admin/users/${userId}/role`, { role }),
+  getScans: (params?: { risk_level?: string; media_type?: string; limit?: number; offset?: number }) =>
+    api.get('/admin/scans', { params }),
+  getAuditLogs: (params?: { action?: string; limit?: number; offset?: number }) =>
+    api.get('/admin/audit-logs', { params }),
+  getModels: () => api.get('/admin/models'),
+  getCurrentModel: () => api.get('/admin/model/current'),
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -99,6 +99,49 @@ class SessionResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+class RequestEmailVerificationRequest(BaseModel):
+    email: Optional[EmailStr] = None
+
+
+class AdminUserResponse(BaseModel):
+    id: str
+    email: str
+    full_name: Optional[str] = None
+    role: str
+    is_active: bool
+    is_verified: bool
+    scans_used_this_month: int
+    scans_limit: int
+    total_scans: int = 0
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AdminUserUpdateStatusRequest(BaseModel):
+    is_active: bool
+
+
+class AdminUserUpdateRoleRequest(BaseModel):
+    role: str
+
+
+class AdminStatsResponse(BaseModel):
+    total_users: int
+    active_users: int
+    verified_users: int
+    total_scans: int
+    scans_by_risk: Dict[str, int]
+    scans_by_media: Dict[str, int]
+    total_reports: int
+    active_sessions: int
+    system_status: Dict[str, Any]
+
+
 # ── Analysis ──────────────────────────────────────────────────────────────────
 
 class RiskLevel(str, Enum):

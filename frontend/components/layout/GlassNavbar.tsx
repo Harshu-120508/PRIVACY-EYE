@@ -17,6 +17,7 @@ import {
   ExternalLink,
   ChevronDown,
   Sparkles,
+  ShieldAlert,
 } from 'lucide-react'
 import clsx from 'clsx'
 import Cookies from 'js-cookie'
@@ -100,6 +101,23 @@ export const GlassNavbar: React.FC = () => {
                 </Link>
               )
             })}
+            {user?.role === 'ADMIN' && (
+              <Link
+                href="/dashboard/admin"
+                className={clsx(
+                  'relative flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold tracking-wide transition-all duration-200 select-none',
+                  pathname?.startsWith('/dashboard/admin')
+                    ? 'text-white bg-brand-violet/20 shadow-sm border border-brand-violet/30'
+                    : 'text-brand-violet/80 hover:text-white hover:bg-brand-violet/10 border border-transparent'
+                )}
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-brand-violet" />
+                <span>Admin</span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded-full font-mono bg-brand-violet/20 text-brand-violet border border-brand-violet/30">
+                  OPS
+                </span>
+              </Link>
+            )}
           </nav>
 
           {/* Right Action Controls */}
@@ -204,6 +222,16 @@ export const GlassNavbar: React.FC = () => {
                       <Sparkles className="w-3.5 h-3.5 text-brand-cyan" />
                       <span>AI Security Assistant</span>
                     </Link>
+                    {user?.role === 'ADMIN' && (
+                      <Link
+                        href="/dashboard/admin"
+                        onClick={() => setProfileOpen(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-brand-violet hover:text-white hover:bg-brand-violet/15 transition-all font-semibold"
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5 text-brand-violet" />
+                        <span>Admin Console</span>
+                      </Link>
+                    )}
                   </div>
                   <div className="pt-1.5 border-t border-white/8">
                     <button

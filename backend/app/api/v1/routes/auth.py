@@ -33,6 +33,8 @@ from app.schemas.schemas import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
     SessionResponse,
+    VerifyEmailRequest,
+    RequestEmailVerificationRequest,
 )
 from app.core.security import (
     verify_password,
@@ -41,6 +43,7 @@ from app.core.security import (
     generate_secure_token,
     hash_token,
     decode_token,
+    create_verification_token,
     get_current_user,
 )
 from app.services.user_service import user_service
@@ -368,9 +371,12 @@ async def forgot_password(
         # In production, dispatch email with raw_reset link
         logger.info("Password reset token generated", user_id=user.id)
 
-    return {
+    resp = {
         "message": "If an account exists for that email address, password reset instructions have been issued.",
     }
+    if user and user.is_active and settings.APP_ENV != "production":
+        resp["reset_token"] = raw_reset
+    return resp
 
 
 @router.post("/reset-password")
@@ -457,3 +463,100 @@ async def terminate_session(
         raise HTTPException(status_code=404, detail="Session not found or already terminated.")
     await db.commit()
     return {"success": True, "message": "Session terminated."}
+
+
+# ── Email Verification ────────────────────────────────────────────────────────
+
+@router.post("/request-verification")
+async def request_verification(
+    body: Optional[RequestEmailVerificationRequest] = None,
+    request: Request = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate an email verification link for the user.
+    Can be called by an authenticated user, or by supplying the registered email.
+    """
+    user: Optional[User] = None
+    if request:
+        auth_header = request.headers.get("authorization", "")
+        token = auth_header.replace("Bearer ", "").strip() if auth_header.startswith("Bearer ") else request.cookies.get("access_token")
+        if token:
+            try:
+                payload = decode_token(token)
+                uid = payload.get("sub")
+                if uid:
+                    user = await user_service.get_by_id(db, uid)
+            except Exception:
+                pass
+
+    if not user and body and body.email:
+        user = await user_service.get_by_email(db, body.email)
+
+    if not user:
+        raise HTTPException(status_code=400, detail="User account not found or not authenticated.")
+
+    if user.is_verified:
+        return {"success": True, "message": "Email is already verified."}
+
+    verification_token = create_verification_token(subject=user.id)
+
+    db.add(AuditLog(
+        user_id=user.id,
+        action="EMAIL_VERIFICATION_REQUESTED",
+    ))
+    await db.commit()
+
+    resp = {
+        "success": True,
+        "message": "Verification instructions have been generated.",
+    }
+    if settings.APP_ENV != "production":
+        resp["verification_token"] = verification_token
+
+    return resp
+
+
+@router.post("/verify-email")
+async def verify_email(
+    body: VerifyEmailRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Verify email address using cryptographically signed verification token.
+    """
+    payload = decode_token(body.token)
+    token_type = payload.get("type")
+    if token_type != "email_verification":
+        raise HTTPException(status_code=400, detail="Invalid token type for email verification.")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid token subject.")
+
+    user = await user_service.get_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User account not found.")
+
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="User account is deactivated.")
+
+    user.is_verified = True
+    user.updated_at = datetime.now(timezone.utc)
+
+    db.add(AuditLog(
+        user_id=user.id,
+        action="EMAIL_VERIFIED",
+    ))
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "success": True,
+        "message": "Email address successfully verified.",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "is_verified": user.is_verified,
+        },
+    }

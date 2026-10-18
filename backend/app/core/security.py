@@ -136,6 +136,22 @@ def create_refresh_token(
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
+def create_verification_token(
+    subject: str,
+    expires_delta: Optional[timedelta] = None,
+) -> str:
+    """Generate signed JWT email verification token (defaults to 24 hours)."""
+    expire = datetime.now(timezone.utc) + (
+        expires_delta if expires_delta else timedelta(hours=24)
+    )
+    payload = {
+        "sub": subject,
+        "exp": expire,
+        "type": "email_verification",
+    }
+    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
 def decode_token(token: str) -> dict:
     """Decode and cryptographically verify a JWT."""
     try:
