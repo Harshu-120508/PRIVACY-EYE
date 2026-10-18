@@ -12,7 +12,7 @@ from app.core.logging import configure_logging
 from app.database.session import engine
 from app.database import models  # noqa: F401 — ensure models are registered
 from app.api.v1 import router as api_v1_router
-from app.core.middleware import RateLimitMiddleware, RequestIDMiddleware
+from app.core.middleware import RateLimitMiddleware, RequestIDMiddleware, CSRFMiddleware
 
 configure_logging()
 logger = structlog.get_logger(__name__)
@@ -47,6 +47,7 @@ app = FastAPI(
 
 # ── Middleware ──────────────────────────────────────────────────────────────
 app.add_middleware(RequestIDMiddleware)
+app.add_middleware(CSRFMiddleware)
 app.add_middleware(RateLimitMiddleware, calls=settings.RATE_LIMIT_PER_MINUTE, period=60)
 
 cors_origins = settings.CORS_ORIGINS
@@ -62,9 +63,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+allowed_hosts = settings.ALLOWED_HOSTS
+if isinstance(allowed_hosts, str):
+    allowed_hosts = [h.strip() for h in allowed_hosts.split(",") if h.strip()]
+
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["*"],  # Restrict in production via proxy/ingress
+    allowed_hosts=allowed_hosts,
 )
 
 # ── Routes ──────────────────────────────────────────────────────────────────

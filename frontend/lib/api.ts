@@ -12,10 +12,13 @@ export const api = axios.create({
   withCredentials: true, // Support HttpOnly SameSite authentication cookies
 })
 
-// Attach JWT on every request
+// Attach JWT and CSRF token on every request
 api.interceptors.request.use((config) => {
   const token = Cookies.get('access_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
+  // Double-submit CSRF protection: send csrf_token cookie value as header
+  const csrfToken = Cookies.get('csrf_token')
+  if (csrfToken) config.headers['X-CSRF-Token'] = csrfToken
   return config
 })
 

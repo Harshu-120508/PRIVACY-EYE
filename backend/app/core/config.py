@@ -37,8 +37,9 @@ class Settings(BaseSettings):
     TEMP_UPLOAD_DIR: str = "./tmp/uploads"
     TEMP_RETENTION_MINUTES: int = 30
 
-    # CORS
+    # CORS & Security
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001"]
+    ALLOWED_HOSTS: List[str] = ["*"]
 
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 30
