@@ -294,7 +294,7 @@ export default function AdminDashboardPage() {
         <div className="space-y-6">
           {/* Metrics Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <GlassCard variant="subtle" className="p-5 border border-white/8 space-y-2">
+            <GlassCard variant="base" className="p-5 border border-white/8 space-y-2">
               <span className="text-[11px] font-mono uppercase tracking-wider text-white/50">
                 Total Users
               </span>
@@ -306,7 +306,7 @@ export default function AdminDashboardPage() {
               </div>
             </GlassCard>
 
-            <GlassCard variant="subtle" className="p-5 border border-white/8 space-y-2">
+            <GlassCard variant="base" className="p-5 border border-white/8 space-y-2">
               <span className="text-[11px] font-mono uppercase tracking-wider text-white/50">
                 Global Scans
               </span>
@@ -314,7 +314,7 @@ export default function AdminDashboardPage() {
               <p className="text-[10px] text-white/40">Multi-modal deepfake analyses</p>
             </GlassCard>
 
-            <GlassCard variant="subtle" className="p-5 border border-white/8 space-y-2">
+            <GlassCard variant="base" className="p-5 border border-white/8 space-y-2">
               <span className="text-[11px] font-mono uppercase tracking-wider text-white/50">
                 Evidence Reports
               </span>
@@ -322,12 +322,13 @@ export default function AdminDashboardPage() {
               <p className="text-[10px] text-white/40">Chain-of-custody artifacts</p>
             </GlassCard>
 
-            <GlassCard variant="subtle" className="p-5 border border-white/8 space-y-2">
+            <GlassCard variant="base" className="p-5 border border-white/8 space-y-2">
               <span className="text-[11px] font-mono uppercase tracking-wider text-white/50">
                 Active Sessions
               </span>
               <p className="text-3xl font-bold text-brand-blue tracking-tight">{stats.active_sessions}</p>
               <p className="text-[10px] text-status-safe flex items-center gap-1">
+
                 <span className="w-1.5 h-1.5 rounded-full bg-status-safe animate-pulse" />
                 Live authenticated sessions
               </p>
@@ -377,8 +378,9 @@ export default function AdminDashboardPage() {
             <GlassCard variant="floating" className="p-6 border border-white/10 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-white">Engine Telemetry & Health</h3>
-                <GlassBadge variant="safe">All Systems Operational</GlassBadge>
+                <GlassBadge status="safe" label="All Systems Operational" />
               </div>
+
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-white/[0.03] border border-white/6">
