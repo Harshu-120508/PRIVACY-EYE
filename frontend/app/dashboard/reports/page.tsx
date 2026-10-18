@@ -85,6 +85,21 @@ export default function ReportsPage() {
     }
   }
 
+  const handleDownloadHtml = async (id: string) => {
+    try {
+      const res = await reportsApi.downloadHtml(id)
+      const url = URL.createObjectURL(res.data)
+      const el = document.createElement('a')
+      el.href = url
+      el.download = `privacy-eye-certificate-${id.slice(0, 8)}.html`
+      el.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      toast.error(getErrorMessage(e))
+    }
+  }
+
+
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       {/* ── HEADER ── */}
@@ -173,6 +188,13 @@ export default function ReportsPage() {
                       Open Report
                     </GlassButton>
                     <button
+                      onClick={() => handleDownloadHtml(item.id)}
+                      className="p-2 rounded-xl glass-surface hover:bg-white/10 text-brand-blue hover:text-white"
+                      title="Download Printable Forensic Certificate (HTML)"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                    </button>
+                    <button
                       onClick={() => handleDownloadJson(item.id)}
                       className="p-2 rounded-xl glass-surface hover:bg-white/10 text-white/60 hover:text-white"
                       title="Download Cryptographic JSON"
@@ -214,6 +236,13 @@ export default function ReportsPage() {
 
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={() => handleDownloadHtml(activeReportDoc.analysis.id)}
+                    className="p-2 rounded-xl glass-surface hover:bg-white/10 text-brand-blue"
+                    title="Download Forensic Certificate (HTML/Print)"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => handleDownloadJson(activeReportDoc.analysis.id)}
                     className="p-2 rounded-xl glass-surface hover:bg-white/10 text-white/70"
                     title="Export JSON"
@@ -228,6 +257,36 @@ export default function ReportsPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Banner to generate full AI report if not yet generated */}
+              {!activeReportDoc.report && (
+                <div className="p-4 rounded-3xl bg-brand-blue/10 border border-brand-blue/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="text-xs text-white/80 space-y-0.5">
+                    <strong className="text-white block font-semibold">Official AI Evidence Report Available</strong>
+                    <span>Generate AI-synthesized executive summary and structured tactical next steps.</span>
+                  </div>
+                  <GlassButton
+                    variant="primary"
+                    size="sm"
+                    isLoading={generatingId === activeReportDoc.analysis.id}
+                    onClick={async () => {
+                      setGeneratingId(activeReportDoc.analysis.id)
+                      try {
+                        const res = await reportsApi.generate(activeReportDoc.analysis.id)
+                        setActiveReportDoc({ analysis: activeReportDoc.analysis, report: res.data })
+                        toast.success('Official evidence report compiled!')
+                      } catch (e) {
+                        toast.error(getErrorMessage(e))
+                      } finally {
+                        setGeneratingId(null)
+                      }
+                    }}
+                    icon={<Sparkles className="w-3.5 h-3.5" />}
+                  >
+                    Generate AI Report
+                  </GlassButton>
+                </div>
+              )}
 
               {/* Assessment Section */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -276,11 +335,24 @@ export default function ReportsPage() {
                 <h4 className="text-xs font-bold uppercase tracking-wider text-white">
                   Executive Forensic Summary
                 </h4>
-                <p className="text-xs text-white/70 leading-relaxed font-sans bg-white/4 p-4 rounded-2xl border border-white/6">
-                  {activeReportDoc.analysis.explanation ||
+                <p className="text-xs text-white/80 leading-relaxed font-sans bg-white/4 p-4 rounded-2xl border border-white/6 whitespace-pre-line">
+                  {activeReportDoc.report?.summary ||
+                    activeReportDoc.analysis.explanation ||
                     'Forensic analysis indicates media structure meets calibrated organic benchmarks. No anomalous frequency spikes or boundary re-compression seams were detected.'}
                 </p>
               </div>
+
+              {/* Tactical Recommendations */}
+              {activeReportDoc.report?.recommendations && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-brand-blue">
+                    Tactical Recommendations & Next Steps
+                  </h4>
+                  <div className="p-4 rounded-2xl bg-white/4 border border-white/6 text-xs text-white/80 whitespace-pre-line leading-relaxed font-sans">
+                    {activeReportDoc.report.recommendations}
+                  </div>
+                </div>
+              )}
 
               {/* Detected Signals */}
               {activeReportDoc.analysis.signals?.length > 0 && (
@@ -307,7 +379,7 @@ export default function ReportsPage() {
                 </div>
               )}
 
-              {/* Limitations & Recommendations (Section 25 requirement) */}
+              {/* Limitations & Legal Disclaimers (Section 25 requirement) */}
               <div className="p-4 rounded-3xl bg-brand-blue/5 border border-brand-blue/15 text-xs text-white/70 space-y-2">
                 <div className="flex items-center gap-2 text-brand-blue font-bold">
                   <Sparkles className="w-4 h-4" />
@@ -343,5 +415,6 @@ export default function ReportsPage() {
         )}
       </AnimatePresence>
     </div>
+
   )
 }

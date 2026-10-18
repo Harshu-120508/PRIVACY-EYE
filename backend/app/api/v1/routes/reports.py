@@ -87,3 +87,36 @@ async def download_report_json(
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="privacy-eye-report-{analysis_id[:8]}.json"'},
     )
+
+
+@router.get("/{analysis_id}/download/html")
+async def download_report_html(
+    analysis_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Download or view report as a print-ready HTML forensic certificate."""
+    result = await db.execute(
+        select(Report).where(
+            Report.analysis_id == analysis_id,
+            Report.user_id == current_user.id,
+        )
+    )
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    analysis_res = await db.execute(
+        select(MediaAnalysis).where(MediaAnalysis.id == analysis_id)
+    )
+    analysis = analysis_res.scalar_one_or_none()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    html_content = report_service.generate_html_certificate(report, analysis)
+    return Response(
+        content=html_content,
+        media_type="text/html",
+        headers={"Content-Disposition": f'inline; filename="privacy-eye-certificate-{analysis_id[:8]}.html"'},
+    )
+

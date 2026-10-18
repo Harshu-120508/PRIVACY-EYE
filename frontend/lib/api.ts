@@ -166,7 +166,10 @@ export const reportsApi = {
   get:      (analysisId: string) => api.get(`/reports/${analysisId}`),
   downloadJson: (analysisId: string) =>
     api.get(`/reports/${analysisId}/download/json`, { responseType: 'blob' }),
+  downloadHtml: (analysisId: string) =>
+    api.get(`/reports/${analysisId}/download/html`, { responseType: 'blob' }),
 }
+
 
 // ── Live Camera Scan ─────────────────────────────────────────────────────────
 export const liveScanApi = {
