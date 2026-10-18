@@ -54,7 +54,23 @@ api.interceptors.response.use(
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authApi = {
   register: async (email: string, password: string, confirm_password?: string, full_name?: string) => {
-    const res = await api.post('/auth/register', { email, password, confirm_password, full_name })
+    let finalConfirm = confirm_password
+    let finalName = full_name
+
+    // Handle 3-argument call: register(email, password, full_name)
+    if (confirm_password !== undefined && full_name === undefined && confirm_password !== password) {
+      finalName = confirm_password
+      finalConfirm = password
+    } else if (!finalConfirm) {
+      finalConfirm = password
+    }
+
+    const res = await api.post('/auth/register', {
+      email,
+      password,
+      confirm_password: finalConfirm,
+      full_name: finalName,
+    })
     const tokens = res.data.tokens || res.data
     if (tokens?.access_token) {
       Cookies.set('access_token', tokens.access_token, { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: 30 })
@@ -64,6 +80,7 @@ export const authApi = {
     }
     return res.data
   },
+
 
   login: async (email: string, password: string, remember_me: boolean = false) => {
     const res = await api.post('/auth/login', { email, password, remember_me })

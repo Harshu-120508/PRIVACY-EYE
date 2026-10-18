@@ -95,6 +95,7 @@ export default function LandingPage() {
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN')
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
+  const [authConfirmPassword, setAuthConfirmPassword] = useState('')
   const [authName, setAuthName] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
 
@@ -106,7 +107,12 @@ export default function LandingPage() {
         await authApi.login(authEmail, authPassword)
         toast.success('Access granted.')
       } else {
-        await authApi.register(authEmail, authPassword, authName)
+        if (authConfirmPassword && authPassword !== authConfirmPassword) {
+          toast.error('Passwords do not match.')
+          setAuthLoading(false)
+          return
+        }
+        await authApi.register(authEmail, authPassword, authConfirmPassword || authPassword, authName)
         await authApi.login(authEmail, authPassword)
         toast.success('Account created and verified!')
       }
@@ -118,6 +124,7 @@ export default function LandingPage() {
       setAuthLoading(false)
     }
   }
+
 
   return (
     <div className="relative min-h-screen flex flex-col bg-canvas text-white selection:bg-brand-blue/30 overflow-x-hidden">
@@ -471,6 +478,24 @@ export default function LandingPage() {
                     />
                   </div>
                 </div>
+
+                {authMode === 'REGISTER' && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-white/70">Confirm Password</label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+                      <input
+                        type="password"
+                        placeholder="••••••••••••"
+                        value={authConfirmPassword}
+                        onChange={(e) => setAuthConfirmPassword(e.target.value)}
+                        className="glass-input pl-11 text-xs"
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+
 
                 <motion.button
                   whileHover={{ scale: 1.02 }}
