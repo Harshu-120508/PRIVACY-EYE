@@ -24,16 +24,19 @@ class ImageAnalyzer:
     """
 
     def __init__(self):
-        if not WEIGHTS_PATH.exists():
-            raise FileNotFoundError(
-                f"Image model weights not found at {WEIGHTS_PATH}. "
-                "Run: python ml/scripts/download_models.py"
-            )
-        import onnxruntime as ort
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if settings.ML_DEVICE == "cuda" else ["CPUExecutionProvider"]
-        self.session = ort.InferenceSession(str(WEIGHTS_PATH), providers=providers)
-        self.input_name = self.session.get_inputs()[0].name
-        logger.info("ImageAnalyzer loaded", path=str(WEIGHTS_PATH))
+        self.session = None
+        self.input_name = None
+        if WEIGHTS_PATH.exists():
+            try:
+                import onnxruntime as ort
+                providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if settings.ML_DEVICE == "cuda" else ["CPUExecutionProvider"]
+                self.session = ort.InferenceSession(str(WEIGHTS_PATH), providers=providers)
+                self.input_name = self.session.get_inputs()[0].name
+                logger.info("ImageAnalyzer loaded ONNX weights", path=str(WEIGHTS_PATH))
+            except Exception as e:
+                logger.warning("Could not initialize image ONNX session", error=str(e))
+        else:
+            logger.info("ImageAnalyzer ONNX weights not found, running digital forensics pipeline")
 
     def preprocess(self, data: bytes) -> np.ndarray:
         from PIL import Image
@@ -47,37 +50,30 @@ class ImageAnalyzer:
     def analyze(self, data: bytes, filename: str) -> dict:
         from app.ml.forensics import forensics_analyze_image, _score_to_risk, _build_result
 
-        inp = self.preprocess(data)
-        outputs = self.session.run(None, {self.input_name: inp})
-        logits = outputs[0][0]
-
-        # Sigmoid for binary classification (fake=1, real=0)
-        synthetic_prob = float(1 / (1 + np.exp(-logits[1] + logits[0])))
-        confidence = min(0.92, abs(synthetic_prob - 0.5) * 2 + 0.60)
-
-        # Augment with forensics signals
         forensics = forensics_analyze_image(data, filename)
-        # Blend DL probability with forensics
-        blended_prob = synthetic_prob * 0.7 + forensics["synthetic_probability"] * 0.3
 
-        risk = _score_to_risk(blended_prob)
-        signals = forensics["signals"]
+        if self.session is not None:
+            try:
+                inp = self.preprocess(data)
+                outputs = self.session.run(None, {self.input_name: inp})
+                logits = outputs[0][0]
 
-        if synthetic_prob > 0.70:
-            signals.insert(0, {
-                "key": "dl_classifier_high",
-                "label": "Deep learning classifier: high synthetic probability",
-                "severity": "high",
-                "score": round(synthetic_prob, 4),
-                "description": "EfficientNet-B4 deepfake classifier assigns high synthetic probability to this image.",
-            })
+                # Sigmoid for binary classification (fake=1, real=0)
+                synthetic_prob = float(1 / (1 + np.exp(-logits[1] + logits[0])))
+                confidence = min(0.92, abs(synthetic_prob - 0.5) * 2 + 0.60)
 
-        return _build_result(
-            risk_level=risk,
-            synthetic_probability=round(blended_prob, 4),
-            confidence=round(confidence, 4),
-            signals=signals,
-            explanation=f"EfficientNet-B4 classifier + forensics ensemble. DL score: {synthetic_prob:.2%}. Risk: {risk}.",
-            provenance=forensics["provenance"],
-            raw_scores={**forensics["raw_scores"], "dl_synthetic_prob": round(synthetic_prob, 4)},
-        )
+                # Blend DL probability with forensics (60% model, 40% forensics)
+                blended_prob = 0.60 * synthetic_prob + 0.40 * forensics["synthetic_probability"]
+                blended_prob = min(max(blended_prob, 0.02), 0.98)
+                risk = _score_to_risk(blended_prob)
+
+                forensics["risk_level"] = risk
+                forensics["synthetic_probability"] = round(blended_prob, 4)
+                forensics["confidence"] = round(max(confidence, forensics["confidence"]), 4)
+                forensics["model_id"] = "privacy-eye-ensemble-image-v1"
+                return forensics
+            except Exception as e:
+                logger.warning("ONNX image inference failed, returning forensics", error=str(e))
+
+        forensics["model_id"] = "privacy-eye-forensics-image-v1"
+        return forensics

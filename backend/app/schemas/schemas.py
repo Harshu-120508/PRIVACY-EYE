@@ -157,6 +157,7 @@ class AnalysisStatus(str, Enum):
     PROCESSING = "PROCESSING"
     COMPLETE = "COMPLETE"
     FAILED = "FAILED"
+    UNSUPPORTED = "UNSUPPORTED"
 
 
 class SignalResponse(BaseModel):
@@ -181,6 +182,11 @@ class AnalysisResponse(BaseModel):
     risk_level: Optional[str]
     synthetic_probability: Optional[float]
     confidence: Optional[float]
+    model_id: Optional[str] = None
+    model_version: Optional[str] = None
+    prediction: Optional[str] = None
+    limitations: Optional[str] = None
+    error_code: Optional[str] = None
     explanation: Optional[str]
     signals: List[SignalResponse] = []
     raw_scores: Optional[Dict[str, Any]]
@@ -335,3 +341,35 @@ class DatasetSummaryStats(BaseModel):
     category_counts: Dict[str, int]
     split_counts: Dict[str, int]
     consent_compliance_pct: float
+
+
+# ── Granular Consent Schemas ──────────────────────────────────────────────────
+
+class ConsentPurposeEnum(str, Enum):
+    MEDIA_PROCESSING = "MEDIA_PROCESSING"
+    SAVE_HISTORY = "SAVE_HISTORY"
+    RETAIN_MEDIA = "RETAIN_MEDIA"
+    EXTERNAL_AI_SHARING = "EXTERNAL_AI_SHARING"
+    MODEL_TRAINING = "MODEL_TRAINING"
+    ANALYTICS = "ANALYTICS"
+
+
+class ConsentItem(BaseModel):
+    purpose: ConsentPurposeEnum
+    granted: bool
+    policy_version: str = "1.0.0"
+    granted_at: Optional[datetime] = None
+    withdrawn_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class UserConsentListResponse(BaseModel):
+    consents: List[ConsentItem]
+    policy_version: str = "1.0.0"
+
+
+class UserConsentUpdateRequest(BaseModel):
+    purpose: ConsentPurposeEnum
+    granted: bool
+    policy_version: str = "1.0.0"

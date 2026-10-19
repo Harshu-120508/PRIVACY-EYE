@@ -844,7 +844,7 @@ export default function LiveCameraScanPage() {
             {/* Canvas HUD Overlay */}
             <canvas
               ref={canvasRef}
-              className="absolute inset-0 w-full h-full pointer-events-none z-10"
+              className="absolute inset-0 w-full h-full pointer-events-none z-10 transform -scale-x-100"
             />
 
             {/* Offline Viewfinder Cover */}
@@ -920,6 +920,14 @@ export default function LiveCameraScanPage() {
                       {analysisResult.blink_count} Blinks
                       {analysisResult.is_blink_timer_paused ? ' (Paused)' : ''}
                     </span>
+                  </div>
+                )}
+
+                {/* Active Motion & Rotation Badge */}
+                {analysisResult?.criteria_evaluation?.movements?.matched && (
+                  <div className="px-3 py-1 rounded-full glass-surface border border-status-safe/40 flex items-center gap-1.5 text-[11px] font-mono text-status-safe">
+                    <Activity className="w-3.5 h-3.5 text-status-safe animate-pulse" />
+                    <span>Motion Active</span>
                   </div>
                 )}
 
@@ -1578,7 +1586,7 @@ export default function LiveCameraScanPage() {
                         analysisResult.guided_protocol.task_3_rotation.marked ? 'text-status-safe' : 'text-white/40'
                       }`}
                     />
-                    <span>Task 3: Smooth head yaw rotation</span>
+                    <span>Task 3: Head motion (Turn Left/Right, Up/Down, or Tilt)</span>
                   </div>
                   {analysisResult.guided_protocol.task_3_rotation.marked ? (
                     <Check className="w-4 h-4 text-status-safe font-bold" />

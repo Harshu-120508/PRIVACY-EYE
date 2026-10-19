@@ -169,14 +169,24 @@ export default function AnalysisDetailPage() {
       <GlassCard variant="floating" className="p-8 md:p-10 space-y-8 border border-white/14">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-white/8">
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-xs font-mono uppercase tracking-widest text-brand-blue">
-                ANALYSIS COMPLETE
+            <div className="flex flex-wrap items-center gap-3 mb-2">
+              <span className={`text-xs font-mono uppercase tracking-widest ${
+                analysis.status === 'COMPLETE' ? 'text-brand-blue' : analysis.status === 'UNSUPPORTED' ? 'text-status-warning' : 'text-status-danger'
+              }`}>
+                {analysis.status}
               </span>
               <span className="text-white/20">·</span>
               <span className="text-xs text-white/50 font-mono">
                 ID: {analysis.id.slice(0, 12)}...
               </span>
+              {analysis.model_id && (
+                <>
+                  <span className="text-white/20">·</span>
+                  <span className="text-xs text-brand-violet font-mono">
+                    {analysis.model_id} (v{analysis.model_version || '1.0.0'})
+                  </span>
+                </>
+              )}
             </div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-white">
               {analysis.original_filename}
@@ -187,7 +197,12 @@ export default function AnalysisDetailPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            {analysis.prediction && (
+              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold border border-white/20 bg-white/5 text-white">
+                PREDICTION: {analysis.prediction}
+              </span>
+            )}
             <GlassBadge status={badgeStatus} label={risk.label.toUpperCase()} pulse />
           </div>
         </div>
@@ -253,6 +268,19 @@ export default function AnalysisDetailPage() {
             </p>
           </div>
         )}
+
+        {/* Model Limitations & Transparency Notice */}
+        {analysis.limitations && (
+          <div className="p-4 rounded-3xl bg-white/[0.03] border border-white/8 space-y-1">
+            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-white/50 flex items-center gap-1.5">
+              <Shield className="w-3.5 h-3.5 text-status-warning" />
+              Model Scope & Limitations
+            </span>
+            <p className="text-xs text-white/70 leading-relaxed font-sans">
+              {analysis.limitations}
+            </p>
+          </div>
+        )}
       </GlassCard>
 
       {/* ── SMALLER FORENSIC PANELS (Section 21 requirement) ── */}
@@ -301,6 +329,18 @@ export default function AnalysisDetailPage() {
               <span className="text-white/50">MIME Format</span>
               <span className="text-white font-semibold">{analysis.mime_type || 'auto-detected'}</span>
             </div>
+            {analysis.model_id && (
+              <div className="p-3 rounded-2xl bg-white/4 border border-white/6 flex items-center justify-between">
+                <span className="text-white/50">Active Model</span>
+                <span className="text-brand-violet font-semibold">{analysis.model_id}</span>
+              </div>
+            )}
+            {analysis.error_code && (
+              <div className="p-3 rounded-2xl bg-status-danger/10 border border-status-danger/30 flex items-center justify-between">
+                <span className="text-status-danger">Error Diagnostic</span>
+                <span className="text-status-danger font-semibold">{analysis.error_code}</span>
+              </div>
+            )}
             <div className="p-3 rounded-2xl bg-white/4 border border-white/6 flex items-center justify-between">
               <span className="text-white/50">File Retained on Server</span>
               <span className="text-status-safe font-semibold">

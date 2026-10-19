@@ -28,8 +28,11 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     # Warm up ML models on startup
     from app.services.ml_service import ml_service
+    from app.services.file_service import file_service
+    file_service.cleanup_orphaned_temp_files(max_age_seconds=0)
     await ml_service.warmup()
     yield
+    file_service.cleanup_orphaned_temp_files(max_age_seconds=0)
     logger.info("Privacy Eye API shutting down")
 
 

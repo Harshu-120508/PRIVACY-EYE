@@ -197,8 +197,11 @@ export default function RegisterPage() {
                   className="w-4 h-4 rounded bg-white/10 border-white/20 text-brand-blue focus:ring-brand-blue/30 focus:ring-offset-0 transition-colors"
                   {...register('accept_terms', { required: 'You must accept the terms' })}
                 />
-                <span className="text-xs text-white/70 hover:text-white transition-colors">
-                  I accept the Privacy Eye terms & privacy policy
+                <span className="text-xs text-white/70">
+                  I accept the Privacy Eye terms &amp;{' '}
+                  <Link href="/privacy" className="text-brand-blue underline underline-offset-2 hover:text-white transition-colors" target="_blank">
+                    Privacy Policy
+                  </Link>
                 </span>
               </label>
               {errors.accept_terms && (

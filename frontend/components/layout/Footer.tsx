@@ -14,8 +14,11 @@ export const Footer: React.FC = () => {
         </div>
 
         <nav className="flex flex-wrap items-center justify-center gap-6 text-xs text-white/50">
+          <Link href="/privacy" className="hover:text-white transition-colors">
+            Privacy Policy
+          </Link>
           <Link href="/dashboard/privacy" className="hover:text-white transition-colors">
-            Privacy
+            Privacy Center
           </Link>
           <Link href="/dashboard/security" className="hover:text-white transition-colors">
             Security

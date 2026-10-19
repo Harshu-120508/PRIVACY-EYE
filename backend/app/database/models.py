@@ -53,6 +53,16 @@ class AnalysisStatus(str, enum.Enum):
     PROCESSING = "PROCESSING"
     COMPLETE = "COMPLETE"
     FAILED = "FAILED"
+    UNSUPPORTED = "UNSUPPORTED"
+
+
+class ConsentPurpose(str, enum.Enum):
+    MEDIA_PROCESSING = "MEDIA_PROCESSING"        # Necessary for detection
+    SAVE_HISTORY = "SAVE_HISTORY"                # Optional
+    RETAIN_MEDIA = "RETAIN_MEDIA"                # Optional (default False)
+    EXTERNAL_AI_SHARING = "EXTERNAL_AI_SHARING"  # Optional (default False)
+    MODEL_TRAINING = "MODEL_TRAINING"            # Optional (default False)
+    ANALYTICS = "ANALYTICS"                      # Optional (default False)
 
 
 class UserRole(str, enum.Enum):
@@ -84,6 +94,7 @@ class User(Base):
     reports: Mapped[List["Report"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     sessions: Mapped[List["UserSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     preferences: Mapped[Optional["UserPreferences"]] = relationship(back_populates="user", uselist=False, cascade="all, delete-orphan")
+    consents: Mapped[List["UserConsent"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 # ── Sessions ──────────────────────────────────────────────────────────────────
@@ -120,6 +131,31 @@ class UserPreferences(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     user: Mapped["User"] = relationship(back_populates="preferences")
+
+
+# ── Granular User Consents ───────────────────────────────────────────────────
+
+class UserConsent(Base):
+    __tablename__ = "user_consents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    purpose: Mapped[ConsentPurpose] = mapped_column(SAEnum(ConsentPurpose), nullable=False)
+    granted: Mapped[bool] = mapped_column(Boolean, default=False)
+    policy_version: Mapped[str] = mapped_column(String(20), default="1.0.0")
+    granted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    withdrawn_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45))
+    user_agent: Mapped[Optional[str]] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    user: Mapped["User"] = relationship(back_populates="consents")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "purpose", name="uq_user_consent_purpose"),
+        Index("ix_user_consents_user_purpose", "user_id", "purpose"),
+    )
 
 
 # ── Password Reset Tokens ─────────────────────────────────────────────────────
@@ -202,6 +238,13 @@ class MediaAnalysis(Base):
     synthetic_probability: Mapped[Optional[float]] = mapped_column(Float)
     confidence: Mapped[Optional[float]] = mapped_column(Float)
     model_version_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("model_versions.id"))
+
+    # Model and inference transparency
+    model_id: Mapped[Optional[str]] = mapped_column(String(100))
+    model_version: Mapped[Optional[str]] = mapped_column(String(50))
+    prediction: Mapped[Optional[str]] = mapped_column(String(50))
+    limitations: Mapped[Optional[str]] = mapped_column(Text)
+    error_code: Mapped[Optional[str]] = mapped_column(String(50))
 
     # Explainability
     explanation: Mapped[Optional[str]] = mapped_column(Text)

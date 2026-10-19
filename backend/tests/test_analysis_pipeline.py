@@ -98,6 +98,9 @@ async def test_image_analysis_pipeline(analysis_test_client: AsyncClient):
     assert data["confidence"] >= 0.0
     assert data["processing_ms"] is not None
     assert data["media_deleted"] is True
+    assert data["model_id"] is not None
+    assert data["prediction"] in ("AUTHENTIC", "MANIPULATED", "SUSPICIOUS", "UNDETERMINED")
+    assert data["limitations"] is not None
     assert isinstance(data["signals"], list)
     assert len(data["signals"]) > 0
 
@@ -152,6 +155,8 @@ async def test_audio_analysis_pipeline(analysis_test_client: AsyncClient):
     assert data["original_filename"] == "sample_voice.wav"
     assert data["risk_level"] is not None
     assert data["synthetic_probability"] is not None
+    assert data["model_id"] is not None
+    assert data["prediction"] is not None
 
 
 @pytest.mark.anyio

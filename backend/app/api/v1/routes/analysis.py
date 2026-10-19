@@ -21,7 +21,16 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
 
 from app.database.session import get_db
-from app.database.models import MediaAnalysis, AnalysisSignal, MediaType, AnalysisStatus, RiskLevel, AuditLog
+from app.database.models import (
+    MediaAnalysis,
+    AnalysisSignal,
+    MediaType,
+    AnalysisStatus,
+    RiskLevel,
+    AuditLog,
+    UserConsent,
+    ConsentPurpose,
+)
 from app.schemas.schemas import AnalysisResponse, AnalysisListResponse, DashboardStats
 from app.core.security import get_current_user
 from app.core.config import settings
@@ -53,6 +62,17 @@ async def _validate_upload(file: UploadFile, allowed_types: set, max_bytes: int)
             detail=f"File too large. Maximum allowed: {max_bytes // (1024*1024)} MB",
         )
     return content
+
+
+async def _check_user_consent(db: AsyncSession, user_id: str, purpose: ConsentPurpose, default: bool = True) -> bool:
+    """Server-side verification of granular user consent."""
+    res = await db.execute(
+        select(UserConsent).where(UserConsent.user_id == user_id, UserConsent.purpose == purpose)
+    )
+    rec = res.scalar_one_or_none()
+    if rec is not None:
+        return rec.granted
+    return default
 
 
 async def _create_analysis_record(
@@ -95,6 +115,11 @@ async def _run_and_save_analysis(
         analysis.risk_level = RiskLevel(result["risk_level"])
         analysis.synthetic_probability = result["synthetic_probability"]
         analysis.confidence = result["confidence"]
+        analysis.model_id = result.get("model_id")
+        analysis.model_version = result.get("model_version")
+        analysis.prediction = result.get("prediction")
+        analysis.limitations = result.get("limitations")
+        analysis.error_code = None
         analysis.explanation = result["explanation"]
         analysis.raw_scores = result.get("raw_scores", {})
         analysis.provenance_info = result.get("provenance", {})
@@ -119,7 +144,9 @@ async def _run_and_save_analysis(
     except Exception as e:
         logger.error("ML analysis failed", analysis_id=analysis.id, error=str(e))
         analysis.status = AnalysisStatus.FAILED
-        analysis.explanation = "Analysis failed due to an internal error."
+        analysis.error_code = "ERR_INFERENCE_FAILURE"
+        analysis.limitations = "Inference could not be completed due to internal pipeline exception."
+        analysis.explanation = f"Analysis failed: {str(e)[:200]}"
 
     await db.flush()
 
@@ -131,12 +158,24 @@ async def analyze_image(
     current_user=Depends(get_current_user),
 ):
     """Upload and analyze an image for deepfake / AI-generation indicators."""
+    can_process = await _check_user_consent(db, current_user.id, ConsentPurpose.MEDIA_PROCESSING, default=True)
+    if not can_process:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Media processing consent is currently withdrawn. Enable detection processing in the Privacy Center to analyze media.",
+        )
+
     if current_user.scans_used_this_month >= current_user.scans_limit:
         raise HTTPException(status_code=429, detail="Monthly scan limit reached. Upgrade to continue.")
 
     content = await _validate_upload(file, ALLOWED_IMAGE_TYPES, settings.max_image_bytes)
     analysis = await _create_analysis_record(db, current_user.id, file.filename or "image", MediaType.IMAGE, content, file.content_type or "")
     await _run_and_save_analysis(db, analysis, content, "image")
+
+    # Enforce history consent
+    save_history = await _check_user_consent(db, current_user.id, ConsentPurpose.SAVE_HISTORY, default=True)
+    if not save_history:
+        analysis.deleted_at = datetime.now(timezone.utc)
 
     # Increment scan counter
     current_user.scans_used_this_month += 1
@@ -156,12 +195,23 @@ async def analyze_video(
     current_user=Depends(get_current_user),
 ):
     """Upload and analyze a video for temporal deepfake and face-swap indicators."""
+    can_process = await _check_user_consent(db, current_user.id, ConsentPurpose.MEDIA_PROCESSING, default=True)
+    if not can_process:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Media processing consent is currently withdrawn. Enable detection processing in the Privacy Center to analyze media.",
+        )
+
     if current_user.scans_used_this_month >= current_user.scans_limit:
         raise HTTPException(status_code=429, detail="Monthly scan limit reached.")
 
     content = await _validate_upload(file, ALLOWED_VIDEO_TYPES, settings.max_video_bytes)
     analysis = await _create_analysis_record(db, current_user.id, file.filename or "video", MediaType.VIDEO, content, file.content_type or "")
     await _run_and_save_analysis(db, analysis, content, "video")
+
+    save_history = await _check_user_consent(db, current_user.id, ConsentPurpose.SAVE_HISTORY, default=True)
+    if not save_history:
+        analysis.deleted_at = datetime.now(timezone.utc)
 
     current_user.scans_used_this_month += 1
     db.add(AuditLog(user_id=current_user.id, action="SCAN_VIDEO", resource_id=analysis.id))
@@ -180,12 +230,23 @@ async def analyze_audio(
     current_user=Depends(get_current_user),
 ):
     """Upload and analyze audio for voice-cloning and synthetic speech indicators."""
+    can_process = await _check_user_consent(db, current_user.id, ConsentPurpose.MEDIA_PROCESSING, default=True)
+    if not can_process:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Media processing consent is currently withdrawn. Enable detection processing in the Privacy Center to analyze media.",
+        )
+
     if current_user.scans_used_this_month >= current_user.scans_limit:
         raise HTTPException(status_code=429, detail="Monthly scan limit reached.")
 
     content = await _validate_upload(file, ALLOWED_AUDIO_TYPES, settings.max_audio_bytes)
     analysis = await _create_analysis_record(db, current_user.id, file.filename or "audio", MediaType.AUDIO, content, file.content_type or "")
     await _run_and_save_analysis(db, analysis, content, "audio")
+
+    save_history = await _check_user_consent(db, current_user.id, ConsentPurpose.SAVE_HISTORY, default=True)
+    if not save_history:
+        analysis.deleted_at = datetime.now(timezone.utc)
 
     current_user.scans_used_this_month += 1
     db.add(AuditLog(user_id=current_user.id, action="SCAN_AUDIO", resource_id=analysis.id))
@@ -297,3 +358,4 @@ async def delete_analysis(
         raise HTTPException(status_code=404, detail="Analysis not found")
     analysis.deleted_at = datetime.now(timezone.utc)
     db.add(AuditLog(user_id=current_user.id, action="DELETE_ANALYSIS", resource_id=analysis_id))
+    await db.commit()

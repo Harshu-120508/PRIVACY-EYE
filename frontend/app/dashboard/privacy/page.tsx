@@ -1,6 +1,7 @@
 'use client'
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   ShieldCheck,
   Lock,
@@ -16,20 +17,95 @@ import {
   HardDrive,
   FileKey,
   Layers,
+  FileText,
+  ExternalLink,
+  ShieldAlert,
+  Sliders,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Cookies from 'js-cookie'
 
-import { authApi, liveScanApi, analysisApi } from '@/lib/api'
+import { authApi, liveScanApi, analysisApi, consentsApi } from '@/lib/api'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { GlassButton } from '@/components/ui/GlassButton'
 import { GlassBadge } from '@/components/ui/GlassBadge'
+
+const CONSENT_DEFINITIONS = [
+  {
+    purpose: 'MEDIA_PROCESSING',
+    title: 'Media Ingestion & Forensic Detection',
+    badge: 'NECESSARY',
+    badgeStatus: 'safe' as const,
+    description:
+      'Required to compute spatial frequency (2D-FFT), error level analysis (ELA), and temporal difference metrics on uploaded media buffers. Never used for marketing.',
+    legalBasis: 'Performance of requested contract / service',
+    canToggle: false,
+  },
+  {
+    purpose: 'SAVE_HISTORY',
+    title: 'Retain Analysis Audit History',
+    badge: 'OPTIONAL',
+    badgeStatus: 'neutral' as const,
+    description:
+      'Stores cryptographic SHA-256 hashes, timestamps, and detection scores in your private dashboard audit trail. If disabled, media is analyzed in memory and immediately discarded without entering history.',
+    legalBasis: 'Consent (Withdrawal available anytime)',
+    canToggle: true,
+  },
+  {
+    purpose: 'RETAIN_MEDIA',
+    title: 'Raw Media Disk Storage',
+    badge: 'DISABLED BY DEFAULT',
+    badgeStatus: 'warning' as const,
+    description:
+      'Allows permanent retention of uploaded image, video, or audio binaries on disk. Disabled by default under zero-knowledge storage policy.',
+    legalBasis: 'Explicit affirmative consent only',
+    canToggle: true,
+  },
+  {
+    purpose: 'EXTERNAL_AI_SHARING',
+    title: 'Third-Party AI Cloud Forwarding',
+    badge: 'DISABLED BY DEFAULT',
+    badgeStatus: 'warning' as const,
+    description:
+      'Forwards media payloads to external model providers (e.g., cloud GPU accelerators). Disabled by default. All standard detections run on private instances.',
+    legalBasis: 'Explicit affirmative consent only',
+    canToggle: true,
+  },
+  {
+    purpose: 'MODEL_TRAINING',
+    title: 'Real Human Defense Dataset Opt-In',
+    badge: 'STRICT OPT-IN',
+    badgeStatus: 'neutral' as const,
+    description:
+      'Allows anonymized facial landmark crops or voice clips to be incorporated into calibration datasets to defend against new synthetic deepfake generators.',
+    legalBasis: 'Affirmative opt-in consent (Never preselected)',
+    canToggle: true,
+  },
+  {
+    purpose: 'ANALYTICS',
+    title: 'Operational Telemetry & Quality Metrics',
+    badge: 'OPTIONAL',
+    badgeStatus: 'neutral' as const,
+    description:
+      'Aggregated performance metrics (latency, error codes, frame rates) to monitor API reliability. Excludes personal identifying data.',
+    legalBasis: 'Consent',
+    canToggle: true,
+  },
+]
 
 export default function PrivacyCenterPage() {
   const router = useRouter()
   const [processingMode, setProcessingMode] = useState<'LOCAL' | 'CLOUD'>('LOCAL')
   const [cameraPermission, setCameraPermission] = useState<string>('prompt')
   const [trainingStats, setTrainingStats] = useState<any>(null)
+  const [consents, setConsents] = useState<Record<string, boolean>>({
+    MEDIA_PROCESSING: true,
+    SAVE_HISTORY: true,
+    RETAIN_MEDIA: false,
+    EXTERNAL_AI_SHARING: false,
+    MODEL_TRAINING: false,
+    ANALYTICS: false,
+  })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -38,7 +114,6 @@ export default function PrivacyCenterPage() {
       return
     }
 
-    // Check device camera permission API
     if (navigator.permissions && navigator.permissions.query) {
       navigator.permissions
         .query({ name: 'camera' as any })
@@ -49,12 +124,29 @@ export default function PrivacyCenterPage() {
         .catch(() => setCameraPermission('unknown'))
     }
 
-    liveScanApi
-      .getTrainingStats()
-      .then((res) => setTrainingStats(res.data))
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    Promise.all([
+      liveScanApi.getTrainingStats().then((res) => setTrainingStats(res.data)).catch(() => {}),
+      consentsApi.getConsents().then((res) => {
+        const map: Record<string, boolean> = {}
+        res.data.consents.forEach((item: any) => {
+          map[item.purpose] = item.granted
+        })
+        setConsents((prev) => ({ ...prev, ...map }))
+      }).catch(() => {}),
+    ]).finally(() => setLoading(false))
   }, [router])
+
+  const handleToggleConsent = async (purpose: string, currentVal: boolean) => {
+    const newVal = !currentVal
+    setConsents((prev) => ({ ...prev, [purpose]: newVal }))
+    try {
+      await consentsApi.updateConsent(purpose, newVal)
+      toast.success(newVal ? `Consent granted for ${purpose}` : `Consent withdrawn for ${purpose}`)
+    } catch {
+      setConsents((prev) => ({ ...prev, [purpose]: currentVal }))
+      toast.error('Failed to update server-side consent decision.')
+    }
+  }
 
   const handleDownloadUserData = async () => {
     try {
@@ -98,20 +190,97 @@ export default function PrivacyCenterPage() {
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
       {/* ── HEADER ── */}
-      <div className="space-y-2">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full glass-surface border border-status-safe/30 text-xs font-mono text-status-safe">
-          <ShieldCheck className="w-3.5 h-3.5" />
-          <span>Privacy Sovereignty Controls</span>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full glass-surface border border-status-safe/30 text-xs font-mono text-status-safe">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Sovereign Consent & Data Protection</span>
+          </div>
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white">
+            PRIVACY CENTER
+          </h1>
+          <p className="text-sm text-white/60 max-w-xl">
+            Granular, purpose-specific consent management with strict server-side enforcement.
+          </p>
         </div>
-        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white">
-          PRIVACY CENTER
-        </h1>
-        <p className="text-sm text-white/60 max-w-xl">
-          Complete transparency over local vs cloud inference, temporary buffers, and zero-knowledge retention.
-        </p>
+
+        {/* Link to public Privacy Policy page */}
+        <Link href="/privacy">
+          <GlassButton variant="secondary" size="sm" icon={<FileText className="w-4 h-4 text-brand-blue" />}>
+            <span>View Public Privacy Policy</span>
+            <ExternalLink className="w-3.5 h-3.5 ml-1 text-white/50" />
+          </GlassButton>
+        </Link>
       </div>
 
-      {/* ── SECTION 1: PROCESSING LOCATION (Section 26 & 27) ── */}
+      {/* ── UNBUNDLED CONSENT CONTROLS (Section 8 Requirement) ── */}
+      <GlassCard variant="elevated" className="p-6 md:p-8 space-y-6">
+        <div className="flex items-center justify-between pb-3 border-b border-white/6">
+          <div className="flex items-center gap-3">
+            <Sliders className="w-5 h-5 text-brand-blue" />
+            <div>
+              <h2 className="text-base font-bold text-white">Unbundled Purpose-Specific Consents</h2>
+              <p className="text-xs text-white/50">Server-enforced permissions governing media usage and data retention</p>
+            </div>
+          </div>
+          <GlassBadge status="safe" label="SERVER-ENFORCED" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {CONSENT_DEFINITIONS.map((def) => {
+            const isGranted = consents[def.purpose] ?? false
+            return (
+              <div
+                key={def.purpose}
+                className={`p-5 rounded-3xl border transition-all space-y-3 ${
+                  isGranted
+                    ? 'bg-white/[0.04] border-white/14 shadow-glass'
+                    : 'bg-black/20 border-white/6 opacity-75'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1">
+                    <span className="font-bold text-white text-sm block">{def.title}</span>
+                    <span className="text-[10px] font-mono text-brand-blue block">
+                      Legal Basis: {def.legalBasis}
+                    </span>
+                  </div>
+                  <GlassBadge status={def.badgeStatus} label={def.badge} />
+                </div>
+
+                <p className="text-xs text-white/60 leading-relaxed min-h-[48px]">
+                  {def.description}
+                </p>
+
+                <div className="flex items-center justify-between pt-2 border-t border-white/6">
+                  <span className="text-xs font-mono text-white/50">
+                    Status: <strong className={isGranted ? 'text-status-safe' : 'text-white/40'}>{isGranted ? 'ACTIVE' : 'WITHDRAWN'}</strong>
+                  </span>
+
+                  {def.canToggle ? (
+                    <button
+                      onClick={() => handleToggleConsent(def.purpose, isGranted)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ${
+                        isGranted
+                          ? 'bg-status-safe/20 text-status-safe border border-status-safe/40 hover:bg-status-danger/20 hover:text-status-danger hover:border-status-danger/40'
+                          : 'bg-white/10 text-white/70 border border-white/10 hover:bg-brand-blue/20 hover:text-brand-blue hover:border-brand-blue/40'
+                      }`}
+                    >
+                      {isGranted ? 'Withdraw Consent' : 'Grant Consent'}
+                    </button>
+                  ) : (
+                    <span className="text-[11px] font-mono text-status-safe font-semibold">
+                      ● INHERENT TO SERVICE
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </GlassCard>
+
+      {/* ── SECTION: PROCESSING LOCATION ── */}
       <GlassCard variant="elevated" className="p-6 md:p-8 space-y-6">
         <div className="flex items-center justify-between pb-3 border-b border-white/6">
           <div className="flex items-center gap-3">
@@ -125,7 +294,6 @@ export default function PrivacyCenterPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Option 1: On-Device / Local Edge */}
           <div
             onClick={() => setProcessingMode('LOCAL')}
             className={`p-5 rounded-3xl border transition-all cursor-pointer space-y-3 ${
@@ -146,7 +314,6 @@ export default function PrivacyCenterPage() {
             </span>
           </div>
 
-          {/* Option 2: Secure Cloud Enclave */}
           <div
             onClick={() => setProcessingMode('CLOUD')}
             className={`p-5 rounded-3xl border transition-all cursor-pointer space-y-3 ${
@@ -169,12 +336,12 @@ export default function PrivacyCenterPage() {
         </div>
       </GlassCard>
 
-      {/* ── SECTION 2: STORAGE & RETENTION (Section 26 requirement) ── */}
+      {/* ── SECTION: STORAGE & RETENTION METRICS ── */}
       <GlassCard variant="elevated" className="p-6 md:p-8 space-y-6">
         <div className="flex items-center gap-3 pb-3 border-b border-white/6">
           <HardDrive className="w-5 h-5 text-status-safe" />
           <div>
-            <h2 className="text-base font-bold text-white">Storage & Data Retention</h2>
+            <h2 className="text-base font-bold text-white">Storage & Data Retention Metrics</h2>
             <p className="text-xs text-white/50">Strict zero-knowledge storage metrics</p>
           </div>
         </div>
@@ -202,7 +369,7 @@ export default function PrivacyCenterPage() {
         </div>
       </GlassCard>
 
-      {/* ── SECTION 3: DEVICE PERMISSIONS (Section 26 requirement) ── */}
+      {/* ── SECTION: HARDWARE SENSORS & PERMISSIONS ── */}
       <GlassCard variant="elevated" className="p-6 md:p-8 space-y-6">
         <div className="flex items-center gap-3 pb-3 border-b border-white/6">
           <Lock className="w-5 h-5 text-brand-violet" />
@@ -251,7 +418,7 @@ export default function PrivacyCenterPage() {
         </div>
       </GlassCard>
 
-      {/* ── SECTION 4: ACCOUNT DATA SOVEREIGNTY (Section 26 requirement) ── */}
+      {/* ── SECTION: ACCOUNT DATA SOVEREIGNTY ── */}
       <GlassCard variant="elevated" className="p-6 md:p-8 space-y-6">
         <div className="flex items-center gap-3 pb-3 border-b border-white/6">
           <FileKey className="w-5 h-5 text-status-warning" />

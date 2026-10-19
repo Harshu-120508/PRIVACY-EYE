@@ -81,27 +81,33 @@ class LiveAuthenticityEngine:
         try:
             from pathlib import Path
             target_path = Path(self.model_path)
-            if not target_path.exists():
+            # Ensure file exists and is not an un-pulled git-lfs pointer (< 1000 bytes)
+            if not target_path.exists() or target_path.stat().st_size < 1000:
                 try:
                     from app.services.model_manager import model_manager
                     resolved = model_manager._find_model_file("face_detection_yunet.onnx")
-                    if resolved and resolved.exists():
+                    if resolved and resolved.exists() and resolved.stat().st_size > 1000:
                         target_path = resolved
                 except Exception:
                     pass
 
-            if target_path.exists():
+            if not target_path.exists() or target_path.stat().st_size < 1000:
+                cache_path = Path("models_cache/face_detection_yunet.onnx")
+                if cache_path.exists() and cache_path.stat().st_size > 1000:
+                    target_path = cache_path
+
+            if target_path.exists() and target_path.stat().st_size > 1000:
                 self._detector = cv2.FaceDetectorYN.create(
                     str(target_path),
                     "",
                     (320, 320),
-                    score_threshold=0.55,
+                    score_threshold=0.40,
                     nms_threshold=0.3,
                     top_k=5,
                 )
                 logger.info("YuNet face detector initialized successfully", path=str(target_path))
             else:
-                logger.warning("YuNet onnx model not found, cascade fallback active")
+                logger.warning("YuNet onnx model not found or incomplete, cascade fallback active")
                 self._detector = None
         except Exception as e:
             logger.error("Failed to initialize YuNet face detector", error=str(e))
@@ -262,7 +268,7 @@ class LiveAuthenticityEngine:
 
         # Pick highest confidence face
         best_face = max(faces, key=lambda f: f[14])
-        if best_face[14] < 0.50:
+        if best_face[14] < 0.38:
             return None
 
         fx, fy, fw, fh = [int(v) for v in best_face[:4]]
@@ -284,7 +290,7 @@ class LiveAuthenticityEngine:
             "left_mouth": [int(best_face[12]), int(best_face[13])],
         }
 
-        valid_faces = [f for f in faces if f[14] >= 0.45]
+        valid_faces = [f for f in faces if f[14] >= 0.35]
         all_boxes = [[int(max(0, f[0])), int(max(0, f[1])), int(f[2]), int(f[3])] for f in valid_faces]
 
         return {
@@ -476,6 +482,14 @@ class LiveAuthenticityEngine:
         face_height = max(face_height, 1.0)
         pitch = float((nose[1] - eye_mid[1]) / face_height) - 0.48
 
+        # Roll approximation (Head tilt clockwise or anticlockwise)
+        # In image coordinates, y increases downward.
+        # If left eye is lower than right eye (le[1] > re[1]), head is tilted clockwise
+        delta_x = float(le[0] - re[0])
+        delta_y = float(le[1] - re[1])
+        roll_rad = float(math.atan2(delta_y, max(delta_x, 1e-4)))
+        roll_deg = float(math.degrees(roll_rad))
+
         # Mouth width / opening indicator
         mouth_width = float(np.linalg.norm(lm - rm))
         mouth_ratio = round(mouth_width / iod, 2)
@@ -483,6 +497,8 @@ class LiveAuthenticityEngine:
         return {
             "yaw": round(yaw, 3),
             "pitch": round(pitch, 3),
+            "roll": round(roll_deg, 2),
+            "roll_rad": round(roll_rad, 3),
             "mouth_ratio": mouth_ratio,
             "iod": round(iod, 1),
         }
@@ -597,7 +613,11 @@ class LiveAuthenticityEngine:
         self, session_id: str, current_pose: Dict[str, Any]
     ) -> Tuple[bool, Dict[str, Any]]:
         """
-        Evaluates whether face exhibits normal 3D movements (Right, Left, Up, Down)
+        Evaluates whether face exhibits normal 3D movements across all axes:
+        - Right / Left (Yaw)
+        - Up / Down (Pitch)
+        - Clockwise / Anticlockwise (Roll / Tilt)
+        - Translation / Centroid displacement
         over the rolling 10-second session window.
         """
         now = time.time()
@@ -611,45 +631,85 @@ class LiveAuthenticityEngine:
                 "matched": False,
                 "yaw_span": 0.0,
                 "pitch_span": 0.0,
+                "roll_span": 0.0,
                 "has_turned_left": False,
                 "has_turned_right": False,
                 "has_tilted_up": False,
                 "has_tilted_down": False,
+                "has_tilted_clockwise": False,
+                "has_tilted_anticlockwise": False,
                 "label": "Initializing movement buffer",
             }
 
         yaws = [f["pose"]["yaw"] for f in recent_frames] + [current_pose["yaw"]]
         pitches = [f["pose"]["pitch"] for f in recent_frames] + [current_pose["pitch"]]
+        rolls = [f["pose"].get("roll", 0.0) for f in recent_frames] + [current_pose.get("roll", 0.0)]
 
         yaw_span = float(max(yaws) - min(yaws))
         pitch_span = float(max(pitches) - min(pitches))
+        roll_span = float(max(rolls) - min(rolls))
 
-        has_turned_left = any(y < -0.06 for y in yaws)
-        has_turned_right = any(y > +0.06 for y in yaws)
-        has_tilted_up = any(p < -0.04 for p in pitches)
-        has_tilted_down = any(p > +0.04 for p in pitches)
+        has_turned_left = any(y < -0.05 for y in yaws) or yaw_span >= 0.07
+        has_turned_right = any(y > +0.05 for y in yaws) or yaw_span >= 0.07
+        has_tilted_up = any(p < -0.03 for p in pitches) or pitch_span >= 0.04
+        has_tilted_down = any(p > +0.03 for p in pitches) or pitch_span >= 0.04
+        has_tilted_clockwise = any(r > 5.0 for r in rolls) or roll_span >= 7.0
+        has_tilted_anticlockwise = any(r < -5.0 for r in rolls) or roll_span >= 7.0
 
-        # Multi-directional movement verification:
-        # User exhibits normal horizontal excursion (right/left) and vertical excursion (up/down)
-        horiz_ok = yaw_span >= 0.06 or (has_turned_left and has_turned_right)
-        vert_ok = pitch_span >= 0.035 or (has_tilted_up and has_tilted_down)
-        # Normal physiological bounds (not rigid like photo, not impossible jitter like glitch)
-        matched = horiz_ok and (pitch_span >= 0.025 or vert_ok) and (yaw_span < 1.1)
+        # Translation / Centroid excursion
+        centroids = []
+        for f in recent_frames:
+            fb = f.get("box")
+            if fb:
+                centroids.append((fb[0] + fb[2] / 2.0, fb[1] + fb[3] / 2.0))
+        if len(centroids) >= 2:
+            c_xs = [c[0] for c in centroids]
+            c_ys = [c[1] for c in centroids]
+            disp = math.hypot(max(c_xs) - min(c_xs), max(c_ys) - min(c_ys))
+        else:
+            disp = 0.0
 
-        label = (
-            "Multi-directional movement verified (Right/Left/Up/Down)"
-            if matched
-            else "Subtle movement (Turn head slightly Right/Left or Up/Down)"
-        )
+        horiz_motion = yaw_span >= 0.05 or (has_turned_left or has_turned_right)
+        vert_motion = pitch_span >= 0.03 or (has_tilted_up or has_tilted_down)
+        roll_motion = roll_span >= 6.0 or (has_tilted_clockwise or has_tilted_anticlockwise)
+        trans_motion = disp >= 10.0
+
+        # True if any physiological motion is observed
+        matched = bool(horiz_motion or vert_motion or roll_motion or trans_motion)
+
+        # Dynamic human-readable label
+        active_directions = []
+        if horiz_motion:
+            active_directions.append("Left/Right")
+        if vert_motion:
+            active_directions.append("Up/Down")
+        if roll_motion:
+            active_directions.append("Clockwise/Anticlockwise tilt")
+
+        if len(active_directions) >= 2:
+            label = f"Multi-directional motion verified ({', '.join(active_directions)})"
+        elif roll_motion:
+            label = f"Head tilt motion verified: Clockwise/Anticlockwise ({roll_span:.1f}°)"
+        elif horiz_motion:
+            label = f"Head turn motion verified: Right/Left (Yaw span: {yaw_span:.2f})"
+        elif vert_motion:
+            label = f"Head tilt motion verified: Up/Down (Pitch span: {pitch_span:.2f})"
+        elif trans_motion:
+            label = "Spatial viewport movement verified"
+        else:
+            label = "Subtle movement (Turn head Right/Left, Up/Down, or Tilt Clockwise/Anticlockwise)"
 
         return matched, {
             "matched": matched,
             "yaw_span": round(yaw_span, 3),
             "pitch_span": round(pitch_span, 3),
+            "roll_span": round(roll_span, 2),
             "has_turned_left": has_turned_left,
             "has_turned_right": has_turned_right,
             "has_tilted_up": has_tilted_up,
             "has_tilted_down": has_tilted_down,
+            "has_tilted_clockwise": has_tilted_clockwise,
+            "has_tilted_anticlockwise": has_tilted_anticlockwise,
             "label": label,
         }
 
@@ -929,18 +989,35 @@ class LiveAuthenticityEngine:
             task_2_marked = False
             task_2_label = f"{blink_count} / 3 blinks recorded (Awaiting {3 - blink_count} more blinks)"
 
-        # ── Task 3: Rotate face smoothly without blurring ─────────────────
+        # ── Task 3: Smooth face rotation & multi-directional motion ────────
         curr_yaw = float(pose["yaw"])
-        guided["yaw_min"] = min(guided["yaw_min"], curr_yaw)
-        guided["yaw_max"] = max(guided["yaw_max"], curr_yaw)
+        curr_roll = float(pose.get("roll", 0.0))
+        curr_pitch = float(pose.get("pitch", 0.0))
+
+        guided["yaw_min"] = min(guided.get("yaw_min", curr_yaw), curr_yaw)
+        guided["yaw_max"] = max(guided.get("yaw_max", curr_yaw), curr_yaw)
         yaw_span = float(guided["yaw_max"] - guided["yaw_min"])
 
-        delta_yaw = abs(curr_yaw - guided["last_yaw"])
+        guided["roll_min"] = min(guided.get("roll_min", curr_roll), curr_roll)
+        guided["roll_max"] = max(guided.get("roll_max", curr_roll), curr_roll)
+        roll_span = float(guided["roll_max"] - guided["roll_min"])
+
+        guided["pitch_min"] = min(guided.get("pitch_min", curr_pitch), curr_pitch)
+        guided["pitch_max"] = max(guided.get("pitch_max", curr_pitch), curr_pitch)
+        pitch_span = float(guided["pitch_max"] - guided["pitch_min"])
+
+        delta_yaw = abs(curr_yaw - guided.get("last_yaw", curr_yaw))
         guided["last_yaw"] = curr_yaw
 
-        if delta_yaw > 0.025:
+        delta_roll = abs(curr_roll - guided.get("last_roll", curr_roll))
+        guided["last_roll"] = curr_roll
+
+        delta_pitch = abs(curr_pitch - guided.get("last_pitch", curr_pitch))
+        guided["last_pitch"] = curr_pitch
+
+        if delta_yaw > 0.02 or delta_roll > 2.5 or delta_pitch > 0.02:
             guided["rotation_frames"] += 1
-            if delta_yaw <= 0.28:
+            if delta_yaw <= 0.35 and delta_roll <= 25.0 and delta_pitch <= 0.35:
                 guided["smooth_rotations"] += 1
 
         # Region clarity check: eyes, cheeks, chin/beard
@@ -956,18 +1033,26 @@ class LiveAuthenticityEngine:
         eyes_sharp = float(cv2.Laplacian(cv2.cvtColor(eyes_patch, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()) if eyes_patch.size > 0 else 0.0
         chin_sharp = float(cv2.Laplacian(cv2.cvtColor(chin_patch, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()) if chin_patch.size > 0 else 0.0
 
-        features_sharp = bool(eyes_sharp >= 22.0 and chin_sharp >= 18.0)
-        if yaw_span > 0.12 and not features_sharp:
+        features_sharp = bool(eyes_sharp >= 16.0 and chin_sharp >= 12.0)
+        if (yaw_span > 0.12 or roll_span > 8.0 or pitch_span > 0.06) and not features_sharp:
             guided["sharp_during_rotation"] = False
 
-        if yaw_span >= 0.20 and guided["smooth_rotations"] >= 3 and guided["sharp_during_rotation"]:
+        motion_excursion = bool(
+            (yaw_span >= 0.09) or (roll_span >= 7.0) or (pitch_span >= 0.05)
+        )
+        if motion_excursion and guided["smooth_rotations"] >= 2:
             guided["rotation_verified"] = True
 
         task_3_marked = bool(guided["rotation_verified"])
         if task_3_marked:
-            task_3_label = f"Rotation Verified: Smooth rotation & sharp features (Yaw span: {yaw_span:.2f} rad)"
+            if roll_span >= 7.0:
+                task_3_label = f"Motion Verified: Head tilt & rotation verified ({roll_span:.1f}° tilt)"
+            elif pitch_span >= 0.05:
+                task_3_label = f"Motion Verified: Vertical tilt (Up/Down) verified ({pitch_span:.2f} rad)"
+            else:
+                task_3_label = f"Rotation Verified: Smooth rotation & sharp features (Yaw span: {yaw_span:.2f} rad)"
         else:
-            task_3_label = f"Rotation pending: Yaw span {yaw_span:.2f} / 0.20 rad (Rotate face smoothly left & right)"
+            task_3_label = f"Motion pending: Turn head Left/Right, Up/Down, or Tilt Clockwise/Anticlockwise"
 
         total_marked = int((1 if task_1_marked else 0) + (1 if task_2_marked else 0) + (1 if task_3_marked else 0))
 
@@ -1172,9 +1257,10 @@ class LiveAuthenticityEngine:
         if prev_pose:
             d_yaw = abs(pose["yaw"] - prev_pose["yaw"])
             d_pitch = abs(pose["pitch"] - prev_pose["pitch"])
+            d_roll = abs(pose.get("roll_rad", 0.0) - prev_pose.get("roll_rad", 0.0))
             d_mouth = abs(pose["mouth_ratio"] - prev_pose["mouth_ratio"])
         else:
-            d_yaw, d_pitch, d_mouth = 0.0, 0.0, 0.0
+            d_yaw, d_pitch, d_roll, d_mouth = 0.0, 0.0, 0.0, 0.0
 
         # Landmark displacement relative to face scale (interocular distance)
         if prev_frame:
@@ -1373,12 +1459,15 @@ class LiveAuthenticityEngine:
             "movements": {
                 "yaw_span": guided_protocol["task_3_rotation"]["yaw_span"],
                 "pitch_span": movement_data.get("pitch_span", 0.0),
+                "roll_span": movement_data.get("roll_span", 0.0),
                 "has_turned_left": movement_data.get("has_turned_left", False),
                 "has_turned_right": movement_data.get("has_turned_right", False),
                 "has_tilted_up": movement_data.get("has_tilted_up", False),
                 "has_tilted_down": movement_data.get("has_tilted_down", False),
-                "matched": guided_protocol["task_3_rotation"]["marked"],
-                "label": guided_protocol["task_3_rotation"]["label"],
+                "has_tilted_clockwise": movement_data.get("has_tilted_clockwise", False),
+                "has_tilted_anticlockwise": movement_data.get("has_tilted_anticlockwise", False),
+                "matched": bool(movement_data.get("matched", False) or guided_protocol["task_3_rotation"]["marked"]),
+                "label": movement_data.get("label", guided_protocol["task_3_rotation"]["label"]),
             },
             "lips": {
                 "angle_diff_deg": lips_data.get("angle_diff_deg", 0.0),
@@ -1396,7 +1485,7 @@ class LiveAuthenticityEngine:
         reason_codes.extend(blink_res.get("reason_codes", []))
         reason_codes.extend(screen_res.get("reason_codes", []))
 
-        vitality_flux = (d_yaw * 6.0) + (d_pitch * 6.0) + (disp_rate * 3.0)
+        vitality_flux = (d_yaw * 5.0) + (d_pitch * 5.0) + (d_roll * 5.0) + (disp_rate * 3.0)
         time_flux = math.sin(time.time() * 2.8) * 0.5
         user_message = None
 

@@ -142,28 +142,42 @@ export const authApi = {
 
 // ── Analysis ──────────────────────────────────────────────────────────────────
 export const analysisApi = {
-  analyzeImage: (file: File) => {
+  analyzeImage: (file: File, onProgress?: (percent: number) => void) => {
     const form = new FormData()
     form.append('file', file)
     return api.post('/analyze/image', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (e) => e, // can be used for progress bar
+      onUploadProgress: (e) => {
+        if (e.total && onProgress) {
+          onProgress(Math.round((e.loaded * 100) / e.total))
+        }
+      },
     })
   },
 
-  analyzeVideo: (file: File) => {
+  analyzeVideo: (file: File, onProgress?: (percent: number) => void) => {
     const form = new FormData()
     form.append('file', file)
     return api.post('/analyze/video', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (e) => {
+        if (e.total && onProgress) {
+          onProgress(Math.round((e.loaded * 100) / e.total))
+        }
+      },
     })
   },
 
-  analyzeAudio: (file: File) => {
+  analyzeAudio: (file: File, onProgress?: (percent: number) => void) => {
     const form = new FormData()
     form.append('file', file)
     return api.post('/analyze/audio', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (e) => {
+        if (e.total && onProgress) {
+          onProgress(Math.round((e.loaded * 100) / e.total))
+        }
+      },
     })
   },
 
@@ -175,6 +189,13 @@ export const analysisApi = {
   deleteAnalysis: (id: string) => api.delete(`/analyze/${id}`),
 
   getStats: () => api.get('/analyze/stats'),
+}
+
+// ── Consents ──────────────────────────────────────────────────────────────────
+export const consentsApi = {
+  getConsents: () => api.get('/users/me/consents'),
+  updateConsent: (purpose: string, granted: boolean, policy_version: string = '1.0.0') =>
+    api.put('/users/me/consents', { purpose, granted, policy_version }),
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────────

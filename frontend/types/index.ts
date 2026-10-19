@@ -2,7 +2,7 @@
 
 export type RiskLevel = 'LOW' | 'SUSPICIOUS' | 'HIGH' | 'CRITICAL' | 'UNDETERMINED'
 export type MediaType  = 'IMAGE' | 'VIDEO' | 'AUDIO'
-export type AnalysisStatus = 'PENDING' | 'PROCESSING' | 'COMPLETE' | 'FAILED'
+export type AnalysisStatus = 'PENDING' | 'PROCESSING' | 'COMPLETE' | 'FAILED' | 'UNSUPPORTED'
 
 export interface Signal {
   signal_key:   string
@@ -24,6 +24,11 @@ export interface Analysis {
   risk_level:           RiskLevel | null
   synthetic_probability: number | null
   confidence:           number | null
+  model_id?:            string | null
+  model_version?:       string | null
+  prediction?:          string | null
+  limitations?:         string | null
+  error_code?:          string | null
   explanation:          string | null
   signals:              Signal[]
   raw_scores:           Record<string, unknown> | null
@@ -32,6 +37,27 @@ export interface Analysis {
   processing_ms:        number | null
   created_at:           string
   updated_at:           string
+}
+
+export type ConsentPurpose =
+  | 'MEDIA_PROCESSING'
+  | 'SAVE_HISTORY'
+  | 'RETAIN_MEDIA'
+  | 'EXTERNAL_AI_SHARING'
+  | 'MODEL_TRAINING'
+  | 'ANALYTICS'
+
+export interface ConsentItem {
+  purpose: ConsentPurpose
+  granted: boolean
+  policy_version: string
+  granted_at?: string | null
+  withdrawn_at?: string | null
+}
+
+export interface UserConsentListResponse {
+  consents: ConsentItem[]
+  policy_version: string
 }
 
 export interface AnalysisListResponse {

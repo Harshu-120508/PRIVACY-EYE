@@ -66,22 +66,14 @@ const MEDIA_CONFIG: Record<
   },
 }
 
-const SCAN_STAGES = [
-  'Uploading media payload...',
-  'Extracting cryptographic SHA-256 hash...',
-  'Checking spatial visual residuals (ELA & 2D-FFT)...',
-  'Analyzing temporal continuity & compression seams...',
-  'Verifying camera metadata & EXIF provenance...',
-  'Fusing multi-spectral evidence...',
-  'Generating calibrated forensic assessment...',
-]
-
 export default function AnalyzeMediaPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<MediaTypeTab>('IMAGE')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [scanStageIndex, setScanStageIndex] = useState(0)
+  const [uploadPercent, setUploadPercent] = useState(0)
+  const [processingState, setProcessingState] = useState<'uploading' | 'inferring' | 'complete' | 'failed'>('uploading')
+  const [statusMessage, setStatusMessage] = useState('Preparing media for upload...')
 
   const config = MEDIA_CONFIG[activeTab]
 
@@ -106,28 +98,36 @@ export default function AnalyzeMediaPage() {
   const runAnalysis = async () => {
     if (!selectedFile) return
     setIsUploading(true)
-    setScanStageIndex(0)
+    setUploadPercent(0)
+    setProcessingState('uploading')
+    setStatusMessage(`Uploading ${selectedFile.name}...`)
 
-    // Progression loop through scanning animation stages
-    const stageInterval = setInterval(() => {
-      setScanStageIndex((prev) => (prev < SCAN_STAGES.length - 1 ? prev + 1 : prev))
-    }, 1200)
+    const handleProgress = (percent: number) => {
+      setUploadPercent(percent)
+      if (percent < 100) {
+        setStatusMessage(`Uploading payload (${percent}%)...`)
+      } else {
+        setProcessingState('inferring')
+        setStatusMessage('Payload received. Running forensic & neural model inference...')
+      }
+    }
 
     try {
       let res
       if (activeTab === 'IMAGE') {
-        res = await analysisApi.analyzeImage(selectedFile)
+        res = await analysisApi.analyzeImage(selectedFile, handleProgress)
       } else if (activeTab === 'VIDEO') {
-        res = await analysisApi.analyzeVideo(selectedFile)
+        res = await analysisApi.analyzeVideo(selectedFile, handleProgress)
       } else {
-        res = await analysisApi.analyzeAudio(selectedFile)
+        res = await analysisApi.analyzeAudio(selectedFile, handleProgress)
       }
 
-      clearInterval(stageInterval)
+      setProcessingState('complete')
+      setStatusMessage('Inference verified. Loading audit report...')
       toast.success('Analysis complete!')
       router.push(`/dashboard/analysis/${res.data.id}`)
     } catch (err) {
-      clearInterval(stageInterval)
+      setProcessingState('failed')
       setIsUploading(false)
       toast.error(getErrorMessage(err))
     }
@@ -168,7 +168,7 @@ export default function AnalyzeMediaPage() {
       {/* ── DROPZONE / SCANNER CONTAINER ── */}
       <GlassCard variant="elevated" className="p-8 md:p-12 relative overflow-hidden">
         {isUploading ? (
-          /* Futuristic Forensic Scanning Animation (Section 20 requirement) */
+          /* Truthful Forensic & Neural Ingestion Progress */
           <div className="py-12 flex flex-col items-center justify-center text-center space-y-6">
             <div className="relative w-28 h-28 flex items-center justify-center">
               {/* Outer pulsing ring */}
@@ -182,21 +182,25 @@ export default function AnalyzeMediaPage() {
 
             <div className="space-y-2 max-w-md">
               <span className="text-xs font-mono uppercase tracking-widest text-brand-blue">
-                Running Neural & Forensic Classifiers
+                {processingState === 'uploading' ? 'Ingesting Media Buffer' : 'Running Forensic & Neural Classifiers'}
               </span>
               <h3 className="text-lg font-bold text-white transition-all duration-300">
-                {SCAN_STAGES[scanStageIndex]}
+                {statusMessage}
               </h3>
               <p className="text-xs text-white/40 font-mono">
-                Stage {scanStageIndex + 1} of {SCAN_STAGES.length} · Encrypted session
+                {processingState === 'uploading'
+                  ? `Upload progress: ${uploadPercent}%`
+                  : 'Backend pipeline executing · Memory buffer only'}
               </p>
             </div>
 
-            {/* Stage Progress Bar */}
+            {/* Real Progress Bar */}
             <div className="w-full max-w-sm h-1.5 bg-white/10 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-brand-blue to-brand-violet rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${((scanStageIndex + 1) / SCAN_STAGES.length) * 100}%` }}
+                className={`h-full bg-gradient-to-r from-brand-blue to-brand-violet rounded-full transition-all duration-300 ease-out ${
+                  processingState === 'inferring' ? 'animate-pulse' : ''
+                }`}
+                style={{ width: `${processingState === 'uploading' ? Math.max(uploadPercent, 5) : 100}%` }}
               />
             </div>
           </div>

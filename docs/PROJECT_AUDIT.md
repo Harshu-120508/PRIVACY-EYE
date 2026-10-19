@@ -1,261 +1,144 @@
-# Privacy Eye — Stage 1: Project Audit
+# Privacy Eye — Comprehensive Project Audit & Baseline System Map
 
-> **Audited by:** Dexter  
-> **Date:** 2026-10-18  
-> **Git Branch:** `main` (clean working tree, no uncommitted changes)  
-> **Commit:** `46c1467` — _fix(frontend): resolve backend rewrite URL destination to prevent 404 proxy loop_
-
----
-
-## 1. Repository Overview
-
-| Item | Value |
-|---|---|
-| **Root path** | `C:\Users\harsh\PRIVACY-EYE` |
-| **Structure** | Monorepo — `frontend/` (Next.js 14) + `backend/` (FastAPI/Python) |
-| **Frontend deploy target** | Vercel (`vercel.json`) |
-| **Backend deploy target** | Railway (`railway.toml`, `nixpacks.toml`, `Dockerfile`) |
-| **Database** | PostgreSQL 15 (Docker Compose) / SQLite fallback for local dev |
-| **ML model storage** | Hugging Face Hub (`privacy-eye/privacy-eye-models`) |
-| **CI/CD** | GitHub Actions (3 workflows: `backend.yml`, `frontend.yml`, `nextjs.yml`) |
-| **Git remotes** | `origin` → GitHub (`Hasrhu/privacy-eye`) |
-| **Active branches** | `main`, plus 4 remote backups/experiments |
-| **Total commits** | 14 meaningful feature commits |
+> **Audited by:** Dexter (Senior Full-Stack, AI/ML, Cybersecurity Architect, MCP & Privacy Engineer)  
+> **Date:** 2026-10-19  
+> **Repository:** `C:\Users\harsh\PRIVACY-EYE`  
+> **Active Branch:** `main` (Clean working tree, up-to-date with `origin/main`)  
+> **Verification Status:** 48/48 Backend Pytest Tests Passing, Frontend TypeScript (tsc) 0 Errors  
 
 ---
 
-## 2. Technology Stack
+## 1. Executive Summary
 
-### Frontend
-| Tech | Version | Purpose |
-|---|---|---|
-| Next.js | 14.2.5 | App Router, SSR, routing |
-| React | 18.3.1 | UI components |
-| TypeScript | 5.5.2 | Type safety |
-| Tailwind CSS | 3.4.4 | Styling (dark frosted glassmorphism design system) |
-| Framer Motion | 11.2.12 | Animations |
-| Axios | 1.7.2 | HTTP client |
-| Zustand | 4.5.2 | State management |
-| React Hook Form | 7.52.1 | Form handling |
-| React Dropzone | 14.2.3 | File uploads |
-| Recharts | 2.12.7 | Dashboard charts |
-| Lucide React | 0.395.0 | Icons |
-| js-cookie | 3.0.5 | Cookie-based JWT token management |
+Privacy Eye is an AI and forensic detection platform designed to identify manipulated, synthetic, and deepfake media across images, videos, audio, and live camera streams.
 
-### Backend
-| Tech | Version | Purpose |
-|---|---|---|
-| FastAPI | 0.111.0 | REST API framework |
-| Python | 3.11+ | Runtime |
-| Uvicorn | 0.30.1 | ASGI server |
-| SQLAlchemy | 2.0.30 (async) | ORM |
-| Alembic | 1.13.1 | Database migrations |
-| asyncpg | 0.29.0 | Async PostgreSQL driver |
-| Pydantic | 2.7.1 | Data validation |
-| python-jose | 3.3.0 | JWT signing/verification |
-| argon2-cffi | 23.1+ | Argon2id password hashing |
-| bcrypt (passlib) | 1.7.4 | Legacy password compat |
-| structlog | 24.2.0 | Structured logging |
-| httpx | 0.27.0 | Async HTTP client |
-| tenacity | 8.3.0 | Retry logic |
-
-### ML / AI
-| Tech | Version | Purpose |
-|---|---|---|
-| PyTorch | 2.3.1 | Model training framework |
-| ONNX Runtime | 1.18.0 | Cross-platform inference |
-| OpenCV | 4.9.0 | Face detection (YuNet), image processing |
-| Transformers | 4.41.2 | Pretrained model access |
-| timm | 1.0.3 | EfficientNet model zoo |
-| Librosa | 0.10.2 | Audio feature extraction |
-| scikit-learn | 1.5.0 | Evaluation metrics |
-| google-generativeai | 0.7.2 | Gemini AI agent integration |
-
-### Infrastructure
-| Tech | Purpose |
-|---|---|
-| Docker Compose | Local multi-service orchestration (Postgres + Backend + Frontend) |
-| Railway | Backend deployment (Dockerfile-based) |
-| Vercel | Frontend deployment (Next.js) |
-| Hugging Face Hub | ML model artifact storage |
-| PostgreSQL 15 | Production database |
+This audit evaluates the repository against production prototype standards:
+1. **Zero Hallucination / Zero Simulation Policy:** Every detection score must reflect real mathematical and model inference operations. Fake timers, hardcoded predictions, and simulated stages must be eradicated.
+2. **Model Availability & Truthful Status:** Explicitly disclose whether an inference was produced by an ONNX neural model, classical digital signal processing / frequency forensics, or if it failed / is unsupported.
+3. **Model Context Protocol (MCP) Server:** Implement a secure, scoped MCP server allowing AI agents to interact with approved Privacy Eye detection pipelines.
+4. **Transparent Consent & Data Sovereignty:** Implement granular, unbundled consent controls (detection, history saving, optional media retention, external AI sharing, model improvement opt-in) with server-side enforcement.
+5. **Public Truthful Privacy Policy:** Provide an accessible, legal-grade `/privacy` page detailing real data flows, ephemeral buffer lifecycles, and user rights.
 
 ---
 
-## 3. Architecture Diagram
+## 2. Architecture & Tech Stack Inventory
 
 ```text
-                          PRIVACY EYE ARCHITECTURE
-                                    |
-              +---------------------+---------------------+
-              |                                           |
-        FRONTEND (Next.js 14)                     BACKEND (FastAPI)
-        Deploy: Vercel                            Deploy: Railway
-              |                                           |
-        Pages:                                   Modules:
-        - / (Landing - 3D Hero)                  - api/v1/routes/
-        - /auth/login                              - auth.py
-        - /auth/register                           - analysis.py
-        - /auth/forgot-password                    - live_scan.py
-        - /dashboard (Main)                        - reports.py
-        - /dashboard/analysis                      - users.py
-        - /dashboard/analysis/[id]                 - admin.py
-        - /dashboard/history                       - dataset.py
-        - /dashboard/live-scan                   - core/ (config, security, middleware, logging)
-        - /dashboard/reports                     - database/ (session, 12 ORM models)
-        - /dashboard/settings                    - services/ (ml, model_manager, user, file, report)
-        - /dashboard/privacy                     - ml/ (forensics, image, video, audio, live, eye, blink, screen)
-        - /dashboard/security                    - dataset/ (splitter, calibration, quality, augmentation, taxonomy, ood)
-        - /dashboard/developer
-        - /dashboard/assistant
+                                PRIVACY EYE TOPOLOGY
+                                          |
+                +-------------------------+-------------------------+
+                |                                                   |
+      FRONTEND (Next.js 14.2.5)                             BACKEND (FastAPI 0.111.0)
+      App Router, Tailwind CSS, Zustand, Framer Motion      Python 3.14 / Uvicorn / Async SQLAlchemy
+                |                                                   |
+        +-------+-------+                                   +-------+-------+
+        |               |                                   |               |
+    Public Pages   Dashboard Pages                     REST Endpoints   ML & Forensics
+    - /            - /dashboard                        - /auth          - YuNet (ONNX)
+    - /privacy     - /dashboard/analysis               - /analyze       - 2D-FFT / ELA
+    - /auth/login  - /dashboard/live-scan              - /live-scan     - OpenCV Frame Diff
+    - /auth/reg    - /dashboard/privacy                - /reports       - Librosa Spectral
+                   - /dashboard/history                - /users         - MCP Server (Stdio/SSE)
 ```
 
----
+### Technology Matrix
 
-## 4. Database Schema (12+ Tables)
-
-| Table | Purpose | Key Fields |
-|---|---|---|
-| `users` | User accounts | id, email, hashed_password, role, is_active, is_verified |
-| `sessions` | Login sessions | user_id, refresh_token_hash, ip_address, revoked_at |
-| `user_preferences` | Theme/privacy settings | privacy_mode, cloud_processing_enabled |
-| `password_reset_tokens` | Password reset flow | token_hash, expires_at, used_at |
-| `api_keys` | Developer API keys | key_hash, usage_count |
-| `model_versions` | ML model registry | accuracy, precision, recall, f1_score |
-| `media_analysis` | Core scan records | media_type, risk_level, synthetic_probability, confidence |
-| `analysis_signals` | Detection signals per scan | signal_key, severity, score |
-| `reports` | Generated reports | title, summary, pdf_path, report_json |
-| `audit_logs` | Immutable audit trail | action, resource_type, ip_address |
-| `face_training_samples` | Consent-based training data | consent_given, category_label |
-| `dataset_records` | Dataset governance | source_dataset, license_terms, split |
-| `failure_cases` | Hard negative mining | true_label, prediction, confidence |
-| `model_registry` | Model governance | status, license, weights_license, checksum |
-| `live_sessions` | Live camera sessions | stream_fps, total_frames_analyzed |
+| Layer | Component | Version | Role in Platform |
+|---|---|---|---|
+| **Frontend** | Next.js App Router | 14.2.5 | Modern React 18 SSR & CSR UI |
+| **Frontend** | Tailwind CSS | 3.4.4 | Frosted dark glassmorphism UI design system |
+| **Frontend** | Framer Motion & Lucide | 11.2 / 0.395 | Interactive UI motion, micro-animations, icons |
+| **Frontend** | Axios & js-cookie | 1.7.2 / 3.0.5 | Authenticated API transport, CSRF & JWT handling |
+| **Backend** | FastAPI & Uvicorn | 0.111 / 0.30 | High-performance asynchronous API engine |
+| **Backend** | SQLAlchemy & Alembic | 2.0.30 / 1.13.1 | Async ORM with migration management |
+| **Backend** | Pydantic v2 | 2.7.1 | Strict schema validation and serialization |
+| **Backend** | Argon2id & python-jose | 23.1 / 3.3.0 | Secure password hashing & JWT token management |
+| **ML Engine** | ONNX Runtime | 1.18.0 | Cross-platform deep learning tensor execution |
+| **CV Engine** | OpenCV (`cv2`) | 4.9.0 / 5.0.0 | FaceDetectorYN (YuNet), image/video decoding |
+| **Audio** | Librosa & SoundFile | 0.10.2 / 0.12.1 | Mel-spectrogram, spectral flatness, zero-crossing |
+| **Database** | SQLite / PostgreSQL | 3 / 15 | Relational storage for users, audits, & consent |
 
 ---
 
-## 5. Authentication System (Well Implemented)
+## 3. Deep Forensic Audit of Detection Features
 
-| Feature | Status |
-|---|---|
-| Registration with email/password | Working |
-| Argon2id password hashing | Working |
-| JWT access + refresh tokens | Working |
-| Dual auth (Bearer header + HttpOnly cookie) | Working |
-| Session management (list/revoke) | Working |
-| Logout / Logout-all | Working |
-| Password change | Working |
-| Forgot password / reset token flow | Working |
-| Role-based access (USER, ADMIN, ENTERPRISE) | Working |
-| Legacy bcrypt fallback | Working |
-| Rate limiting middleware | Working |
-| Request ID middleware | Working |
+| Feature | Endpoint / Module | Implementation Type | True Status & Verification |
+|---|---|---|---|
+| **Live Face Detection** | `/api/v1/live-scan/frame`<br>`app/ml/live_authenticity.py` | Real Model (ONNX) | **Real.** Uses OpenCV `FaceDetectorYN` with `face_detection_yunet.onnx`. Auto-downloads from official OpenCV Zoo if missing. Tested in `test_eye_blink_screen.py`. |
+| **Live Blink Verification** | `app/ml/eye_analyzer.py`<br>`app/ml/blink_engine.py` | Real CV Algorithm | **Real.** Uses Sobel gradient filters and pupil-to-sclera contrast ratios. Non-punitive 30-second window verified in tests. |
+| **Live Replay Attack Defense** | `app/ml/screen_detector.py` | Real CV Algorithm | **Real.** Uses 2D-FFT Moiré frequency grid detection, rectangular bezel boundary checks, and specular glare variance. |
+| **Benchmark Policies** | `app/ml/benchmarks.py` | Real Rule Engine | **Real.** Silent-Face anti-spoofing policy, FaceForensics compression baselines, and FFHQ texture distribution baselines. |
+| **Image Analysis** | `/api/v1/analyze/image`<br>`app/ml/forensics.py` | Real Digital Forensics | **Real Forensics.** 2D-FFT inner/outer ratio, Error Level Analysis (ELA), quadrant noise standard deviation, EXIF metadata tampering checks. EfficientNet ONNX weights fallback to forensics. |
+| **Video Analysis** | `/api/v1/analyze/video`<br>`app/ml/forensics.py` | Real Video Forensics | **Real Forensics.** Frame extraction with `cv2.VideoCapture` (samples 16 frames), inter-frame absolute difference mean & variance, 8x8 DCT compression block boundaries, inter-frame brightness flicker. |
+| **Audio Analysis** | `/api/v1/analyze/audio`<br>`app/ml/forensics.py` | Real Audio Forensics | **Real Forensics.** Spectral flatness, Mel-spectrogram variance, pitch stability, zero-crossing rate via Librosa/SoundFile. |
 
 ---
 
-## 6. ML / AI Pipeline Status
+## 4. Identified Defects, Simulated Workflows & Deficiencies
 
-### Currently Working (Real Implementation)
-- Forensic analysis: EXIF metadata, frequency domain (DCT/DFT), compression artifacts, color histogram
-- Live camera face detection (YuNet ONNX - auto-downloads)
-- Eye blink detection (EAR algorithm)
-- Screen/replay detection (Moire pattern, reflection, bezel)
-- Presentation attack detection (multi-signal liveness)
+### 4.1 Fabricated Progress in Frontend Media Upload
+- **Location:** `frontend/app/dashboard/analysis/page.tsx` (Lines 112–115)
+- **Defect:** `setInterval` cycles through fake scanning stages (`SCAN_STAGES`) every 1200ms regardless of actual server processing state.
+- **Remediation:** Remove fake interval timer. Tie progress indicator directly to real upload progression and backend job status.
 
-### Requires Model Weights (Placeholder Entries)
-| Model | Size | Status |
-|---|---|---|
-| `face_detection_yunet.onnx` | 232 KB | Auto-downloads from OpenCV Zoo |
-| `image_efficientnet_b4.onnx` | ~78 MB | Placeholder SHA - needs real weights |
-| `video_efficientnet_temporal.onnx` | ~157 MB | Placeholder SHA - needs real weights |
-| `audio_wav2vec2_clone.onnx` | ~377 MB | Placeholder SHA - needs real weights |
+### 4.2 Missing Schema Transparency Fields
+- **Location:** `backend/app/schemas/schemas.py` and `backend/app/database/models.py`
+- **Defect:** `AnalysisResponse` and `MediaAnalysis` lack explicit attributes for:
+  - `model_id` (identifier of the model or forensic pipeline executed)
+  - `model_version` (semantic version of the detector)
+  - `prediction` (`AUTHENTIC`, `MANIPULATED`, `SYNTHETIC`, `SUSPICIOUS`, or `UNDETERMINED`)
+  - `limitations` (human-readable technical boundaries)
+  - `error_code` (standardized machine error codes on failure)
+  - `AnalysisStatus.UNSUPPORTED` (explicit status for incompatible formats)
+- **Remediation:** Add missing schema attributes to reflect truth in inference results.
 
-**Critical Note:** All 4 models share the same SHA-256 hash in the manifest, confirming the 3 large models are placeholder entries. The system correctly falls back to forensics-only mode.
+### 4.3 Missing Public Privacy Policy Page
+- **Location:** `frontend/app/privacy/page.tsx` (Missing)
+- **Defect:** No public Privacy Policy exists at `/privacy`. Legal notices, data lifecycle disclosures, and contact channels are inaccessible to non-authenticated visitors and registration flows.
+- **Remediation:** Create a comprehensive, truthful, and accessible `/privacy` page.
 
----
+### 4.4 Missing Granular Consent System
+- **Location:** `backend/app/database/models.py`
+- **Defect:** User preferences only contain two coarse boolean flags (`privacy_mode`, `cloud_processing_enabled`). There is no purpose-specific `UserConsent` entity tracking:
+  1. Processing media for detection (necessary service basis)
+  2. Saving analysis history (optional)
+  3. Retaining uploaded media (optional, disabled by default)
+  4. Sharing media with external AI providers (optional, disabled by default)
+  5. Using media for model training/improvement (optional opt-in)
+  6. Optional product analytics
+- **Remediation:** Implement `UserConsent` database model, migration, CRUD API routes, and backend enforcement middleware blocking unauthorized data retention or history logging.
 
-## 7. Security Assessment
-
-### Good Practices in Place
-- Argon2id password hashing (OWASP recommended)
-- JWT with configurable expiry and refresh rotation
-- CORS configured with origin restrictions
-- Rate limiting middleware
-- File type and size validation
-- Secure HTTP headers (X-Frame-Options, X-Content-Type-Options, X-XSS-Protection)
-- Audit logging for security actions
-- IDOR protection (queries scoped to current user)
-- Secrets excluded from Git
-
-### Issues Needing Attention
-| Issue | Severity |
-|---|---|
-| No CSRF protection for cookie-based auth | Medium |
-| No Content Security Policy header | Medium |
-| TrustedHostMiddleware allows `*` | Low |
-| No Alembic migration files | Medium |
-| JWT in JS-accessible cookies (not HttpOnly) | Medium |
-| No email verification implementation | Low |
-| Admin panel is skeletal | Low |
-
----
-
-## 8. Existing Tests (7 files, ~1,219 lines)
-
-| File | Lines | Scope |
-|---|---|---|
-| `test_authentication_system.py` | 315 | Auth flows, JWT, sessions |
-| `test_benchmarks.py` | 138 | Performance benchmarks |
-| `test_dataset_api.py` | 108 | Dataset CRUD API |
-| `test_dataset_system.py` | 284 | Dataset splitting |
-| `test_eye_blink_screen.py` | 280 | Eye blink and screen detection |
-| `test_model_manager.py` | 51 | Model manager basics |
-| `test_scan.py` | 43 | Basic scan integration |
+### 4.5 Missing Model Context Protocol (MCP) Server
+- **Location:** `backend/app/mcp/` (Missing)
+- **Defect:** No MCP server exists to expose approved Privacy Eye capabilities to external AI clients.
+- **Remediation:** Build a standards-compliant MCP server exposing 8 tools:
+  1. `get_detection_capabilities`
+  2. `analyze_image`
+  3. `analyze_video`
+  4. `analyze_audio`
+  5. `get_analysis_status`
+  6. `get_analysis_result`
+  7. `get_model_status`
+  8. `get_privacy_settings`
+  Enforce strict schema validation, API key authentication, tenant isolation, and zero media leakage.
 
 ---
 
-## 9. Documentation (23 files)
+## 5. Security & Privacy Lifecycle Assessment
 
-Extensive coverage of architecture, authentication, ML strategy, model selection, dataset governance, deployment, evaluation, confidence scoring, and more.
-
----
-
-## 10. Gap Analysis
-
-### Critical
-1. No Alembic migration history (tables via create_all only)
-2. 3 of 4 ONNX model weights are placeholder entries
-3. Admin panel is skeletal
-
-### Moderate
-4. No CSRF protection
-5. No Content Security Policy
-6. JWT stored in JS-readable cookies
-7. Video/audio analyzers are pass-through stubs
-8. No background task queue for large uploads
-9. No email verification flow
-10. No frontend test coverage
-11. No production error tracking
-
-### Low
-12. No WebSocket upload progress
-13. No feature flags
-14. Docker Compose deprecated version key
+1. **In-Memory Buffering:** Uploaded media is processed directly from memory (`UploadFile.read()`) or temporary files that are deleted via `try...finally: os.unlink(tmp_path)` immediately after inference.
+2. **Ephemeral Media Storage:** `media_deleted = True` is marked on all analyses; no raw image, video, or audio payloads are stored permanently in the database or filesystem.
+3. **Authentication & Session Security:** Argon2id password hashing, JWT access/refresh token rotation, HttpOnly cookie flags, and CSRF double-submit token validation are active.
+4. **Tenant Isolation:** All database queries for analyses, reports, and sessions are strictly scoped by `current_user.id`.
 
 ---
 
-## 11. Recommended Stage 2 Actions
+## 6. Action Plan for Remaining Stages
 
-1. Fix JWT cookie storage (HttpOnly)
-2. Create initial Alembic migration
-3. Fix duplicate httpx in requirements.txt
-4. Remove deprecated docker-compose version key
-5. Add CSRF protection
-6. Add Content Security Policy header
-7. Restrict TrustedHostMiddleware
-
-These are all safe, non-breaking changes.
-
----
-
-> **Status:** Stage 1 COMPLETE. Ready for Stage 2 upon approval.
+- **Stage 2:** Remove simulated progress loops in frontend, enforce structured result schemas, add `UNSUPPORTED` status and error handling.
+- **Stage 3:** Deepen real AI inference pipelines in `video_analyzer.py` and `audio_analyzer.py` to seamlessly blend neural ONNX and spectral forensics with transparent provenance.
+- **Stage 4:** Implement and test the Model Context Protocol (MCP) server.
+- **Stage 5:** Implement the public Privacy Policy page (`/privacy`) and granular Consent Management system with server-side enforcement.
+- **Stage 6:** Strengthen media purge guarantees, account erasure workflows (GDPR Article 17), and audit trails.
+- **Stage 7:** Build automated test coverage for new endpoints, MCP tools, and consent rules; run and verify complete test suite.
+- **Stage 8:** Finalize documentation (`AI_MODEL_PIPELINE.md`, `MCP_INTEGRATION.md`, `PRIVACY_DATA_FLOW.md`, `SECURITY.md`, `KNOWN_LIMITATIONS.md`, etc.).

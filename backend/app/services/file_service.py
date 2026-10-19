@@ -46,5 +46,28 @@ class FileService:
         }
         return mapping.get(mime_type, "")
 
+    def cleanup_orphaned_temp_files(self, max_age_seconds: int = 3600) -> int:
+        """Purge orphaned temporary files from TEMP_UPLOAD_DIR."""
+        import time
+        purged = 0
+        try:
+            now = time.time()
+            if self.temp_dir.exists():
+                for item in self.temp_dir.iterdir():
+                    if item.is_file():
+                        age = now - item.stat().st_mtime
+                        if age >= max_age_seconds:
+                            try:
+                                item.unlink()
+                                purged += 1
+                            except Exception:
+                                pass
+            if purged > 0:
+                logger.info("Purged orphaned temporary upload files", count=purged)
+        except Exception as e:
+            logger.error("Error during temporary file cleanup", error=str(e))
+        return purged
+
+
 
 file_service = FileService()

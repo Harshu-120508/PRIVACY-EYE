@@ -97,7 +97,28 @@ class MLService:
             raise ValueError(f"Unknown media type: {media_type}")
 
         result["processing_ms"] = int((time.monotonic() - t0) * 1000)
+        
+        # Transparent model identification
+        if not result.get("model_id"):
+            result["model_id"] = f"privacy-eye-ensemble-{media_type}-v1" if self._ready else f"privacy-eye-forensics-{media_type}-v1"
         result["model_version"] = self._model_info["version"]
+        
+        # Determine explicit prediction label
+        risk = result.get("risk_level", "UNDETERMINED")
+        if risk in ("CRITICAL", "HIGH"):
+            result["prediction"] = "MANIPULATED"
+        elif risk == "SUSPICIOUS":
+            result["prediction"] = "SUSPICIOUS"
+        elif risk == "LOW":
+            result["prediction"] = "AUTHENTIC"
+        else:
+            result["prediction"] = "UNDETERMINED"
+            
+        result["limitations"] = (
+            "Probabilistic analysis derived from signal processing, spatial/temporal forensics, "
+            "and frequency domain anomalies. Results indicate manipulation risk, not guaranteed fact. "
+            "Downsampling, lossy re-encoding, and camera lens distortions may affect precision."
+        )
         return result
 
     async def _analyze_image(self, data: bytes, filename: str) -> dict:
