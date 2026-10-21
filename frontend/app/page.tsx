@@ -47,7 +47,7 @@ const FEATURES: FeatureDetail[] = [
     title: 'YuNet Biometric Tracking',
     subtitle: '5-Point Landmark Continuous Alignment',
     icon: Camera,
-    color: '#5EA7FF',
+    color: '#FFFFFF',
     description:
       'Detects micro-motion dynamics across eyes, nose tip, and mouth corners. Fuses 3D head yaw/pitch trajectory with biological blink rates to invalidate 2D photo cutouts and silicone presentation attacks.',
     metrics: ['Sub-12ms Inference Latency', 'Continuous Pose Estimation', 'Laplacian Clarity Gating'],
@@ -58,7 +58,7 @@ const FEATURES: FeatureDetail[] = [
     title: 'Silent-Face Fourier PAD',
     subtitle: 'Dual-Scale 2D-FFT Presentation Attack Defense',
     icon: ShieldCheck,
-    color: '#9B7CFF',
+    color: '#E4E4E7',
     description:
       'Transforms facial patches into frequency domains. Electronic screens (OLED, LCD, tablets) and printed paper emit distinct periodic moiré lattice spikes that are absent in natural human skin reflectance.',
     metrics: ['Dual-Scale Frequency Decomposition', 'Screen Moiré Suppression', 'Hard-Negative Replay Gated'],
@@ -69,7 +69,7 @@ const FEATURES: FeatureDetail[] = [
     title: 'FaceForensics++ Residuals',
     subtitle: 'High-Frequency DCT & ELA Seam Analysis',
     icon: Activity,
-    color: '#38BDF8',
+    color: '#D4D4D8',
     description:
       'Inspects spatial compression artifacts and discrete cosine transform (DCT) coefficients. Identifies re-compression boundaries and blending seams typical of deepfake autoencoders and face-swapping algorithms.',
     metrics: ['Error Level Analysis (ELA)', 'Chroma Subsampling Checks', 'Zero-Seam Boundary Verification'],
@@ -80,7 +80,7 @@ const FEATURES: FeatureDetail[] = [
     title: 'Spatial Texture & Boundary Analysis',
     subtitle: 'High-Frequency Gradient & Diffusion Artifact Detection',
     icon: Sparkles,
-    color: '#4ADE80',
+    color: '#FFFFFF',
     description:
       'Deep evaluation of high-frequency texture gradient variance, boundary blending discontinuities, and ocular synthesis symmetry against organic photographic reference distributions.',
     metrics: ['Laplacian Variance Gating', 'Boundary Chroma Continuity', 'Organic Gradient Consistency'],
@@ -172,7 +172,7 @@ export default function LandingPage() {
                 setAuthMode('REGISTER')
                 setAuthModalOpen(true)
               }}
-              className="text-xs font-bold px-5 py-2 rounded-full bg-gradient-to-r from-brand-blue via-brand-cyan to-brand-violet text-white shadow-glow-blue border border-white/20 transition-all cursor-pointer"
+              className="text-xs font-bold px-5 py-2 rounded-full bg-white text-black hover:bg-neutral-200 border border-white transition-all cursor-pointer shadow-md"
             >
               Get Started
             </motion.button>
@@ -186,11 +186,11 @@ export default function LandingPage() {
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass-surface border border-brand-blue/30 mb-6 shadow-glow-blue text-xs font-mono text-brand-blue"
+          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass-surface border border-white/20 mb-6 text-xs font-mono text-white/90"
         >
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-blue opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-blue" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
           </span>
           <span>INTERACTIVE 3D PARALLAX · MOVE CURSOR & SCROLL</span>
         </motion.div>
@@ -203,7 +203,7 @@ export default function LandingPage() {
           className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tight leading-[1.04] max-w-5xl"
         >
           SEE THROUGH{' '}
-          <span className="bg-gradient-to-r from-brand-blue via-brand-cyan to-brand-violet bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-white via-neutral-200 to-neutral-400 bg-clip-text text-transparent">
             THE FAKE.
           </span>
         </motion.h1>
@@ -256,7 +256,7 @@ export default function LandingPage() {
                 }}
                 whileTap={{ scale: 0.96 }}
                 onClick={() => setSelectedFeature(feat)}
-                className="relative rounded-3xl p-6 glass-floating border border-white/12 shadow-glass hover:border-brand-blue/40 cursor-pointer overflow-hidden group text-left transition-colors"
+                className="relative rounded-3xl p-6 glass-floating border border-white/12 shadow-glass hover:border-white/40 cursor-pointer overflow-hidden group text-left transition-colors"
                 style={{ transformStyle: 'preserve-3d' }}
               >
                 {/* Background ambient corner flare */}
@@ -278,7 +278,7 @@ export default function LandingPage() {
                   </div>
 
                   <div>
-                    <h3 className="text-lg font-bold text-white group-hover:text-brand-blue transition-colors">
+                    <h3 className="text-lg font-bold text-white group-hover:text-white transition-colors">
                       {feat.title}
                     </h3>
                     <p className="text-xs text-white/50 mt-1 font-mono">{feat.subtitle}</p>
@@ -292,7 +292,7 @@ export default function LandingPage() {
                     <span className="font-mono text-[10px] text-status-safe font-bold">
                       {feat.liveState.split('·')[0]}
                     </span>
-                    <span className="text-brand-blue font-semibold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                    <span className="text-white font-semibold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                       Inspect <ArrowRight className="w-3.5 h-3.5" />
                     </span>
                   </div>
@@ -502,7 +502,7 @@ export default function LandingPage() {
                   whileTap={{ scale: 0.97 }}
                   type="submit"
                   disabled={authLoading}
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-brand-blue to-brand-violet text-white font-bold text-xs tracking-wider uppercase shadow-glow-blue mt-2 flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-3.5 rounded-2xl bg-white text-black font-bold text-xs tracking-wider uppercase shadow-md hover:bg-neutral-200 mt-2 flex items-center justify-center gap-2 cursor-pointer transition-all"
                 >
                   {authLoading ? 'Verifying...' : authMode === 'LOGIN' ? 'Sign In & Launch' : 'Create & Access'}
                   <ArrowRight className="w-4 h-4" />
@@ -517,7 +517,7 @@ export default function LandingPage() {
       <section id="architecture" className="py-20 px-4 md:px-8 max-w-7xl mx-auto w-full">
         <div className="rounded-4xl glass-card p-8 md:p-12 border border-white/12 flex flex-col md:flex-row items-center justify-between gap-10">
           <div className="text-left max-w-xl space-y-4">
-            <GlassBadge status="brand" label="ZERO DATA RETENTION ARCHITECTURE" />
+            <GlassBadge status="neutral" label="ZERO DATA RETENTION ARCHITECTURE" />
             <h2 className="text-3xl md:text-4xl font-bold text-white">
               Privacy First. Always On-Device.
             </h2>

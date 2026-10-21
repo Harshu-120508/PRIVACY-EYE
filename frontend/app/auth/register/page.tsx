@@ -67,8 +67,8 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-canvas relative">
       {/* Background ambient lighting */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-brand-blue/10 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-brand-violet/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-white/[0.025] rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-white/[0.02] rounded-full blur-[100px] pointer-events-none" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -82,7 +82,7 @@ export default function RegisterPage() {
 
         <GlassCard variant="floating" className="p-8 md:p-10 space-y-6 border border-white/14">
           <div className="text-center space-y-1">
-            <span className="text-xs uppercase font-mono tracking-widest text-brand-blue">
+            <span className="text-xs uppercase font-mono tracking-widest text-white/80">
               Autonomous Verification
             </span>
             <h1 className="text-2xl font-bold tracking-tight text-white">Create Account</h1>
@@ -194,12 +194,12 @@ export default function RegisterPage() {
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-brand-blue focus:ring-brand-blue/30 focus:ring-offset-0 transition-colors"
+                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-white focus:ring-white/30 focus:ring-offset-0 transition-colors"
                   {...register('accept_terms', { required: 'You must accept the terms' })}
                 />
                 <span className="text-xs text-white/70">
                   I accept the Privacy Eye terms &amp;{' '}
-                  <Link href="/privacy" className="text-brand-blue underline underline-offset-2 hover:text-white transition-colors" target="_blank">
+                  <Link href="/privacy" className="text-white underline underline-offset-2 hover:text-white/80 transition-colors" target="_blank">
                     Privacy Policy
                   </Link>
                 </span>
@@ -214,7 +214,7 @@ export default function RegisterPage() {
               variant="primary"
               size="lg"
               isLoading={loading}
-              className="w-full shadow-glow-blue mt-2"
+              className="w-full mt-2"
               icon={<ArrowRight className="w-4 h-4" />}
             >
               Create Account
@@ -223,7 +223,7 @@ export default function RegisterPage() {
 
           <div className="pt-4 border-t border-white/6 text-center text-xs text-white/50">
             Already have an account?{' '}
-            <Link href="/auth/login" className="text-brand-blue font-semibold hover:underline">
+            <Link href="/auth/login" className="text-white font-semibold hover:underline">
               Sign In
             </Link>
           </div>

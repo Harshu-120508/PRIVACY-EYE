@@ -24,8 +24,8 @@ export const GlassCard: React.FC<GlassCardProps> = ({
 
   const glowStyles = {
     none: '',
-    blue: 'shadow-glow-blue border-brand-blue/30',
-    violet: 'shadow-glow-violet border-brand-violet/30',
+    blue: 'shadow-[0_0_25px_rgba(255,255,255,0.18)] border-white/30',
+    violet: 'shadow-[0_0_25px_rgba(212,212,216,0.15)] border-white/25',
     safe: 'shadow-glow-safe border-status-safe/30',
   }[glow]
 

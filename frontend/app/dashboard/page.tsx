@@ -84,8 +84,8 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <div className="w-12 h-12 rounded-2xl glass-card flex items-center justify-center border border-brand-blue/30 shadow-glow-blue animate-pulse">
-          <Eye className="w-6 h-6 text-brand-blue" />
+        <div className="w-12 h-12 rounded-2xl glass-card flex items-center justify-center border border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.15)] animate-pulse">
+          <Eye className="w-6 h-6 text-white" />
         </div>
         <p className="mt-4 text-xs font-mono uppercase tracking-widest text-white/50">
           Connecting to Privacy Eye Core...
@@ -103,7 +103,7 @@ export default function DashboardPage() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-xs uppercase font-mono tracking-widest text-brand-blue">
+            <span className="text-xs uppercase font-mono tracking-widest text-white/80">
               Command Center
             </span>
             <span className="text-white/20">·</span>
@@ -130,7 +130,7 @@ export default function DashboardPage() {
               variant="primary"
               size="sm"
               icon={<Camera className="w-4 h-4" />}
-              className="shadow-glow-blue"
+              className="shadow-[0_0_20px_rgba(255,255,255,0.2)]"
             >
               Start Live Scan
             </GlassButton>
@@ -144,7 +144,7 @@ export default function DashboardPage() {
         className="relative overflow-hidden p-8 md:p-10 border border-white/14"
       >
         {/* Ambient subtle glow background */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-brand-blue/10 rounded-full blur-[90px] pointer-events-none" />
+        <div className="absolute top-0 right-0 w-80 h-80 bg-white/[0.04] rounded-full blur-[90px] pointer-events-none" />
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
           <div className="space-y-4 max-w-xl">
@@ -157,7 +157,7 @@ export default function DashboardPage() {
               <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white">
                 PROTECTION ACTIVE
               </h2>
-              <p className="text-sm font-medium text-brand-blue mt-0.5">
+              <p className="text-sm font-medium text-white/80 mt-0.5">
                 Privacy-first analysis
               </p>
             </div>

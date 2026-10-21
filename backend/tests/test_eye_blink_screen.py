@@ -246,3 +246,45 @@ def test_live_authenticity_case_b_screen_presentation_override():
         assert res["assessment"] == "POSSIBLE_REPLAY"
         assert res["presentation_risk"] == 1.0
         assert "A face appears to be displayed through a phone" in res["user_message"]
+
+
+def test_screen_detector_handheld_mobile_phone():
+    """Verify detection of a handheld smartphone with non-convex finger grips and rounded corners."""
+    detector = ScreenDetector()
+    frame = np.ones((480, 640, 3), dtype=np.uint8) * 90
+
+    # Draw a phone with finger tabs on left and right borders
+    cv2.rectangle(frame, (200, 60), (440, 420), (20, 20, 20), 8)
+    cv2.rectangle(frame, (210, 70), (430, 410), (140, 140, 140), -1)
+    # Add finger bumps along the vertical bezel
+    cv2.circle(frame, (200, 200), 16, (170, 130, 110), -1)
+    cv2.circle(frame, (440, 220), 16, (170, 130, 110), -1)
+
+    # Face inside the smartphone display
+    face_box = [250, 130, 140, 180]
+    res = detector.analyze(frame, face_box)
+
+    assert res["presentation_attack"] is True
+    assert res["presentation_attack_confidence"] >= 0.80
+    assert "PHONE_PRESENTATION_DETECTED" in res["reason_codes"]
+
+
+def test_liveness_override_and_confidence_scaling():
+    """Verify that head turning and 5s blinking overrides presentation attack to 60%, scaling to 85-95% on sliding/movement."""
+    detector = ScreenDetector()
+    frame = np.ones((480, 640, 3), dtype=np.uint8) * 80
+    cv2.rectangle(frame, (170, 70), (470, 420), (15, 15, 15), 6)
+    cv2.rectangle(frame, (180, 80), (460, 410), (160, 160, 160), -1)
+    face_box = [230, 140, 170, 200]
+
+    # Without liveness proven -> flags attack
+    res_static = detector.analyze(frame, face_box, is_liveness_proven=False)
+    assert res_static["presentation_attack"] is True
+
+    # With liveness proven (freely turned face and blinking every 5s) -> refutes attack
+    res_live = detector.analyze(frame, face_box, is_liveness_proven=True)
+    assert res_live["presentation_attack"] is False
+    assert res_live["presentation_attack_confidence"] == 0.0
+    assert "BACKGROUND_SCREEN_NON_ATTACK" in res_live["reason_codes"]
+
+

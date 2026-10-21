@@ -53,8 +53,8 @@ function LoginFormContent() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-canvas relative">
       {/* Background ambient lighting */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-brand-blue/10 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-brand-violet/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-white/[0.025] rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-white/[0.02] rounded-full blur-[100px] pointer-events-none" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -68,7 +68,7 @@ function LoginFormContent() {
 
         <GlassCard variant="floating" className="p-8 md:p-10 space-y-6 border border-white/14">
           <div className="text-center space-y-1">
-            <span className="text-xs uppercase font-mono tracking-widest text-brand-blue">
+            <span className="text-xs uppercase font-mono tracking-widest text-white/80">
               Secure Perimeter Access
             </span>
             <h1 className="text-2xl font-bold tracking-tight text-white">Sign In to Privacy Eye</h1>
@@ -97,7 +97,7 @@ function LoginFormContent() {
                 <label className="block text-xs font-semibold text-white/70">Password</label>
                 <Link
                   href="/auth/forgot-password"
-                  className="text-[11px] text-brand-blue cursor-pointer hover:underline"
+                  className="text-[11px] text-white/70 cursor-pointer hover:underline hover:text-white"
                 >
                   Forgot?
                 </Link>
@@ -128,7 +128,7 @@ function LoginFormContent() {
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-brand-blue focus:ring-brand-blue/30 focus:ring-offset-0 transition-colors"
+                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-white focus:ring-white/30 focus:ring-offset-0 transition-colors"
                   {...register('remember_me')}
                 />
                 <span className="text-xs text-white/70 hover:text-white transition-colors">
@@ -142,7 +142,7 @@ function LoginFormContent() {
               variant="primary"
               size="lg"
               isLoading={loading}
-              className="w-full shadow-glow-blue mt-2"
+              className="w-full mt-2"
               icon={<ArrowRight className="w-4 h-4" />}
             >
               Sign In
@@ -151,7 +151,7 @@ function LoginFormContent() {
 
           <div className="pt-4 border-t border-white/6 text-center text-xs text-white/50">
             Don't have an account?{' '}
-            <Link href="/auth/register" className="text-brand-blue font-semibold hover:underline">
+            <Link href="/auth/register" className="text-white font-semibold hover:underline">
               Create Account
             </Link>
           </div>

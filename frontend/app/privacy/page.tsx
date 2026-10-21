@@ -27,11 +27,11 @@ export const metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <div className="min-h-screen bg-brand-dark text-white selection:bg-brand-blue selection:text-white">
+    <div className="min-h-screen bg-canvas text-white selection:bg-white/25 selection:text-white">
       {/* Background ambient lighting */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-brand-blue/15 rounded-full blur-3xl" />
-        <div className="absolute top-1/3 -right-40 w-96 h-96 bg-brand-violet/15 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -left-40 w-96 h-96 bg-white/[0.025] rounded-full blur-3xl" />
+        <div className="absolute top-1/3 -right-40 w-96 h-96 bg-white/[0.02] rounded-full blur-3xl" />
       </div>
 
       <div className="relative max-w-4xl mx-auto px-4 py-12 sm:px-6 lg:px-8 space-y-12">
@@ -63,9 +63,9 @@ export default function PrivacyPolicyPage() {
         </div>
 
         {/* Important Notice Callout */}
-        <div className="p-6 rounded-3xl bg-brand-blue/10 border border-brand-blue/30 space-y-2">
-          <div className="flex items-center gap-2 text-brand-blue font-bold text-sm">
-            <Lock className="w-4 h-4" />
+        <div className="p-6 rounded-3xl bg-white/5 border border-white/15 space-y-2">
+          <div className="flex items-center gap-2 text-white font-bold text-sm">
+            <Lock className="w-4 h-4 text-white" />
             <span>Zero-Knowledge Default Architecture</span>
           </div>
           <p className="text-xs text-white/80 leading-relaxed">
@@ -78,7 +78,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 1 */}
           <GlassCard variant="elevated" className="p-6 md:p-8 space-y-4">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Database className="w-5 h-5 text-brand-blue" />
+              <Database className="w-5 h-5 text-white" />
               1. What Data We Collect
             </h2>
             <div className="space-y-3 text-white/70 leading-relaxed text-xs">
@@ -96,7 +96,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 2 */}
           <GlassCard variant="elevated" className="p-6 md:p-8 space-y-4">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Cpu className="w-5 h-5 text-brand-violet" />
+              <Cpu className="w-5 h-5 text-white/90" />
               2. Why Each Category of Data is Processed
             </h2>
             <div className="space-y-3 text-white/70 leading-relaxed text-xs">
@@ -136,7 +136,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 4 */}
           <GlassCard variant="elevated" className="p-6 md:p-8 space-y-4">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Layers className="w-5 h-5 text-brand-cyan" />
+              <Layers className="w-5 h-5 text-white/90" />
               4. Local vs. Server-Side Inference
             </h2>
             <div className="space-y-3 text-white/70 leading-relaxed text-xs">
@@ -169,7 +169,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 6 */}
           <GlassCard variant="elevated" className="p-6 md:p-8 space-y-4">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-brand-blue" />
+              <ShieldCheck className="w-5 h-5 text-white" />
               6. Your Legal Rights & Data Sovereignty
             </h2>
             <div className="space-y-3 text-white/70 leading-relaxed text-xs">
@@ -210,11 +210,11 @@ export default function PrivacyPolicyPage() {
               </p>
               <div className="p-4 rounded-2xl bg-white/4 border border-white/6 space-y-2 font-mono">
                 <div className="flex items-center gap-2">
-                  <Mail className="w-4 h-4 text-brand-blue" />
+                  <Mail className="w-4 h-4 text-white" />
                   <span>Email: privacy@privacyeye.ai</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Building className="w-4 h-4 text-brand-violet" />
+                  <Building className="w-4 h-4 text-white/80" />
                   <span>Entity: [LEGAL_ENTITY_NAME] (Requires User Legal Registration Input)</span>
                 </div>
                 <div className="flex items-center gap-2">

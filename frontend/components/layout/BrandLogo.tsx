@@ -33,15 +33,15 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       <div
         className={clsx(
           iconSizes,
-          'relative flex items-center justify-center rounded-2xl bg-gradient-to-br from-brand-blue/25 via-brand-violet/20 to-transparent border border-white/20 shadow-glass transition-all duration-300 group-hover:border-brand-blue/50 group-hover:shadow-glow-blue overflow-hidden'
+          'relative flex items-center justify-center rounded-2xl bg-white/5 border border-white/20 shadow-glass transition-all duration-300 group-hover:border-white/50 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.2)] overflow-hidden'
         )}
       >
         {/* Ambient inner glow */}
-        <div className="absolute inset-0 bg-radial-gradient from-brand-blue/30 to-transparent opacity-60" />
+        <div className="absolute inset-0 bg-radial-gradient from-white/10 to-transparent opacity-60" />
         
         {/* Shield outline */}
         <svg
-          className="w-5 h-5 text-brand-blue group-hover:text-white transition-colors duration-300 relative z-10"
+          className="w-5 h-5 text-white group-hover:text-white transition-colors duration-300 relative z-10"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -60,7 +60,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       {showText && (
         <div className="flex flex-col">
           <span className={clsx('font-bold text-white tracking-widest font-sans', textSizes)}>
-            PRIVACY<span className="text-brand-blue ml-1.5 font-extrabold">EYE</span>
+            PRIVACY<span className="text-white ml-1.5 font-extrabold tracking-wider underline decoration-white/40 underline-offset-4">EYE</span>
           </span>
           <span className="text-[9px] uppercase tracking-widest text-white/40 font-mono -mt-0.5">
             AUTHENTICITY ENGINE

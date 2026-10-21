@@ -16,7 +16,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
 }) => {
   const dotColor = {
     safe: 'bg-status-safe shadow-[0_0_10px_#4ADE80]',
-    active: 'bg-brand-blue shadow-[0_0_10px_#5EA7FF]',
+    active: 'bg-white shadow-[0_0_10px_#FFFFFF]',
     warning: 'bg-status-warning shadow-[0_0_10px_#FBBF24]',
     danger: 'bg-status-danger shadow-[0_0_10px_#FB7185]',
     undetermined: 'bg-status-undetermined shadow-[0_0_8px_#94A3B8]',

@@ -36,8 +36,8 @@ export const GlassBadge: React.FC<GlassBadgeProps> = ({
       dot: 'bg-status-undetermined',
     },
     brand: {
-      wrapper: 'bg-brand-blue/10 border border-brand-blue/30 text-brand-blue',
-      dot: 'bg-brand-blue shadow-[0_0_8px_#5EA7FF]',
+      wrapper: 'bg-white/10 border border-white/25 text-white',
+      dot: 'bg-white shadow-[0_0_8px_#FFFFFF]',
     },
     neutral: {
       wrapper: 'bg-white/5 border border-white/10 text-white/70',

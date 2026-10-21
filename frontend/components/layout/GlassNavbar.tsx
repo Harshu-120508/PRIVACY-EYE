@@ -141,7 +141,7 @@ export const GlassNavbar: React.FC = () => {
                 aria-label="Notifications"
               >
                 <Bell className="w-4 h-4" />
-                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-brand-blue" />
+                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-white shadow-[0_0_6px_#FFFFFF]" />
               </button>
 
               {notificationsOpen && (
@@ -150,7 +150,7 @@ export const GlassNavbar: React.FC = () => {
                     <span className="text-xs font-semibold uppercase tracking-wider text-white">
                       Notifications
                     </span>
-                    <span className="text-[11px] text-brand-blue">All Caught Up</span>
+                    <span className="text-[11px] text-white/70">All Caught Up</span>
                   </div>
                   <div className="py-4 space-y-3">
                     <div className="p-3 rounded-2xl bg-white/5 border border-white/8 text-xs space-y-1">
@@ -173,7 +173,7 @@ export const GlassNavbar: React.FC = () => {
                 onClick={() => setProfileOpen(!profileOpen)}
                 className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-2xl bg-white/5 border border-white/10 text-white/80 hover:text-white hover:bg-white/10 transition-all"
               >
-                <div className="w-6 h-6 rounded-xl bg-gradient-to-br from-brand-blue to-brand-violet flex items-center justify-center text-xs font-bold text-white shadow-sm">
+                <div className="w-6 h-6 rounded-xl bg-white/20 border border-white/20 flex items-center justify-center text-xs font-bold text-white shadow-sm">
                   {user?.full_name ? user.full_name.charAt(0).toUpperCase() : (user?.email ? user.email.charAt(0).toUpperCase() : 'P')}
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-white/50" />
@@ -185,7 +185,7 @@ export const GlassNavbar: React.FC = () => {
                     <p className="text-xs font-semibold text-white truncate">
                       {user?.full_name || user?.email || 'Authenticated User'}
                     </p>
-                    <p className="text-[10px] text-brand-blue font-mono mt-0.5 truncate">
+                    <p className="text-[10px] text-white/50 font-mono mt-0.5 truncate">
                       {user?.email || 'Active Session'} • {user?.role || 'USER'}
                     </p>
                   </div>
@@ -195,7 +195,7 @@ export const GlassNavbar: React.FC = () => {
                       onClick={() => setProfileOpen(false)}
                       className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-white/70 hover:text-white hover:bg-white/5 transition-all"
                     >
-                      <Shield className="w-3.5 h-3.5 text-brand-blue" />
+                      <Shield className="w-3.5 h-3.5 text-white/80" />
                       <span>Privacy Center</span>
                     </Link>
                     <Link
@@ -203,7 +203,7 @@ export const GlassNavbar: React.FC = () => {
                       onClick={() => setProfileOpen(false)}
                       className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-white/70 hover:text-white hover:bg-white/5 transition-all"
                     >
-                      <ShieldCheck className="w-3.5 h-3.5 text-status-safe" />
+                      <ShieldCheck className="w-3.5 h-3.5 text-white/80" />
                       <span>Security Center</span>
                     </Link>
                     <Link
@@ -211,7 +211,7 @@ export const GlassNavbar: React.FC = () => {
                       onClick={() => setProfileOpen(false)}
                       className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-white/70 hover:text-white hover:bg-white/5 transition-all"
                     >
-                      <Key className="w-3.5 h-3.5 text-brand-violet" />
+                      <Key className="w-3.5 h-3.5 text-white/80" />
                       <span>API & Developers</span>
                     </Link>
                     <Link
@@ -219,16 +219,16 @@ export const GlassNavbar: React.FC = () => {
                       onClick={() => setProfileOpen(false)}
                       className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-white/70 hover:text-white hover:bg-white/5 transition-all"
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-brand-cyan" />
+                      <Sparkles className="w-3.5 h-3.5 text-white/80" />
                       <span>AI Security Assistant</span>
                     </Link>
                     {user?.role === 'ADMIN' && (
                       <Link
                         href="/dashboard/admin"
                         onClick={() => setProfileOpen(false)}
-                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-brand-violet hover:text-white hover:bg-brand-violet/15 transition-all font-semibold"
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-white hover:text-white hover:bg-white/10 transition-all font-semibold"
                       >
-                        <ShieldAlert className="w-3.5 h-3.5 text-brand-violet" />
+                        <ShieldAlert className="w-3.5 h-3.5 text-white" />
                         <span>Admin Console</span>
                       </Link>
                     )}
@@ -261,7 +261,7 @@ export const GlassNavbar: React.FC = () => {
                 href={item.href}
                 className={clsx(
                   'flex flex-col items-center gap-1 p-2 rounded-2xl transition-all',
-                  isActive ? 'text-brand-blue bg-white/10' : 'text-white/50 hover:text-white'
+                  isActive ? 'text-white bg-white/15' : 'text-white/50 hover:text-white'
                 )}
               >
                 <Icon className="w-4 h-4" />

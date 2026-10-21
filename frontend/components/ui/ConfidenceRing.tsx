@@ -38,7 +38,7 @@ export const ConfidenceRing: React.FC<ConfidenceRingProps> = ({
     safe: '#4ADE80',
     warning: '#FBBF24',
     danger: '#FB7185',
-    brand: '#5EA7FF',
+    brand: '#FFFFFF',
     undetermined: '#94A3B8',
   }
 
@@ -46,7 +46,7 @@ export const ConfidenceRing: React.FC<ConfidenceRingProps> = ({
     safe: 'drop-shadow-[0_0_8px_rgba(74,222,128,0.4)]',
     warning: 'drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]',
     danger: 'drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]',
-    brand: 'drop-shadow-[0_0_8px_rgba(94,167,255,0.4)]',
+    brand: 'drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]',
     undetermined: 'drop-shadow-[0_0_6px_rgba(148,163,184,0.3)]',
   }
 

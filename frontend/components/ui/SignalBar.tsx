@@ -21,7 +21,7 @@ export const SignalBar: React.FC<SignalBarProps> = ({
   const normalizedValue = value <= 1.0 ? Math.round(value * 100) : Math.min(100, Math.round(value))
 
   // Determine bar fill color
-  let barColor = 'bg-brand-blue'
+  let barColor = 'bg-white'
   if (severity) {
     if (severity === 'low') barColor = invertRisk ? 'bg-status-danger' : 'bg-status-safe'
     if (severity === 'medium') barColor = 'bg-status-warning'

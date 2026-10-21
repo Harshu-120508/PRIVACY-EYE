@@ -302,61 +302,93 @@ class LiveAuthenticityEngine:
         }
 
     # ── 3. Screen Replay & Moiré Pattern Detection ────────────────────────────
-    def detect_screen_replay(self, face_crop_bgr: np.ndarray) -> Dict[str, Any]:
+    def detect_screen_replay(
+        self,
+        face_crop_bgr: np.ndarray,
+        full_frame_bgr: Optional[np.ndarray] = None,
+        face_box: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
         """
         Detects presentation attacks (phone/tablet screen or photo replayed to webcam).
-        Evaluates 2D FFT Moiré high-frequency grid peaks and specular reflectance.
+        Evaluates Green-channel 2D FFT Moiré high-frequency grid band energy,
+        subpixel peaks, perimeter bezel margins, and specular reflectance.
         """
         if face_crop_bgr.shape[0] < 30 or face_crop_bgr.shape[1] < 30:
             return {"replay_score": 0.20, "is_screen_likely": False, "signals": []}
 
-        gray_face = cv2.cvtColor(face_crop_bgr, cv2.COLOR_BGR2GRAY)
-        h, w = gray_face.shape
+        # 1. Green Channel 2D FFT Band Energy (Captures OLED PenTile & LCD subpixel raster grids)
+        b, g, r = cv2.split(face_crop_bgr)
+        h, w = g.shape[:2]
+        f_g = np.fft.fft2(g.astype(np.float32))
+        f_shift_g = np.fft.fftshift(f_g)
+        mag_g = 20 * np.log(np.abs(f_shift_g) + 1.0)
 
-        # 1. 2D FFT for periodic screen pixel grid (Moiré pattern)
+        cy, cx = h // 2, w // 2
+        r_inner = max(4, int(min(cy, cx) * 0.40))
+        y, x = np.ogrid[:h, :w]
+        mask_outer = ((x - cx) ** 2 + (y - cy) ** 2) >= (r_inner ** 2)
+        hf_mean = float(np.mean(mag_g[mask_outer]))
+        lf_mean = float(np.mean(mag_g[~mask_outer]))
+        moire_ratio = hf_mean / max(lf_mean, 1.0)
+
+        # 2. Grayscale 2D FFT for periodic high-frequency spikes
+        gray_face = cv2.cvtColor(face_crop_bgr, cv2.COLOR_BGR2GRAY)
         f_transform = np.fft.fft2(gray_face.astype(np.float32))
         f_shift = np.fft.fftshift(f_transform)
         magnitude_spectrum = np.log1p(np.abs(f_shift))
-
-        # Mask out center DC component
-        cy, cx = h // 2, w // 2
-        r_inner = max(4, min(h, w) // 12)
         magnitude_spectrum[cy - r_inner : cy + r_inner, cx - r_inner : cx + r_inner] = 0.0
 
-        # Screen subpixel grids create distinct repetitive high-frequency spikes
         p99 = np.percentile(magnitude_spectrum, 99.2)
         p50 = np.median(magnitude_spectrum)
         peak_to_median_ratio = float(p99 / (p50 + 1e-6))
 
-        # 2. Specular Flatness & Color Saturation in Face
+        # 3. Specular Flatness & Color Saturation in Face
         hsv_face = cv2.cvtColor(face_crop_bgr, cv2.COLOR_BGR2HSV)
         sat = hsv_face[:, :, 1]
         sat_std = float(np.std(sat))
 
-        # Screens typically have unnaturally high peak-to-median ratios and distinct color boundaries
+        # 4. Perimeter Bezel Analysis (if full frame provided)
+        bezel_lines = 0
+        has_bezel = False
+        if full_frame_bgr is not None and face_box is not None:
+            bezel_scan = self._screen_detector.scan_face_perimeter_bezel(full_frame_bgr, face_box)
+            has_bezel = bezel_scan.get("has_bezel_lines", False)
+            bezel_lines = bezel_scan.get("vertical_lines", 0)
+
         replay_score = 0.08
         signals = []
 
-        if peak_to_median_ratio > 3.4:
-            replay_score += 0.52
+        if moire_ratio > 0.68:
+            replay_score += 0.55
             signals.append({
                 "key": "screen_moire_peaks",
                 "label": "High-frequency periodic Moiré patterns",
                 "severity": "high",
-                "detail": f"FFT peak-to-median ratio ({peak_to_median_ratio:.2f}) indicates digital screen subpixel rasterization.",
+                "detail": f"Fourier harmonic band ratio ({moire_ratio:.2f}) indicates digital screen subpixel rasterization.",
             })
-        elif peak_to_median_ratio > 2.6:
-            replay_score += 0.28
+        elif moire_ratio > 0.58:
+            replay_score += 0.30
             signals.append({
                 "key": "screen_subpixel_traces",
                 "label": "Moderate rasterization frequency traces",
                 "severity": "medium",
-                "detail": "Frequency spectrum shows mild periodic interference consistent with display screens.",
+                "detail": f"Frequency spectrum shows periodic interference consistent with display screens (ratio: {moire_ratio:.2f}).",
+            })
+
+        if peak_to_median_ratio > 2.6:
+            replay_score += 0.20
+
+        if has_bezel:
+            replay_score += 0.35
+            signals.append({
+                "key": "flanking_bezel_detected",
+                "label": "Electronic device chassis / bezel framing face",
+                "severity": "high",
+                "detail": f"Detected {bezel_lines} parallel vertical border lines enclosing face margins.",
             })
 
         if sat_std < 14.0:
-            # Planar washed out or uniform backlight
-            replay_score += 0.20
+            replay_score += 0.15
             signals.append({
                 "key": "flat_specular_reflectance",
                 "label": "Planar specular reflectance profile",
@@ -364,11 +396,12 @@ class LiveAuthenticityEngine:
                 "detail": "Low chrominance variance across face skin, typical of 2D screen backlight or printout.",
             })
 
-        replay_score = min(0.92, round(replay_score, 3))
+        replay_score = min(0.99, round(replay_score, 3))
         return {
             "replay_score": replay_score,
             "is_screen_likely": replay_score >= 0.50,
             "peak_to_median_ratio": round(peak_to_median_ratio, 2),
+            "moire_ratio": round(moire_ratio, 2),
             "signals": signals,
         }
 
@@ -1208,7 +1241,7 @@ class LiveAuthenticityEngine:
         face_crop = img_bgr[fy : fy + fh, fx : fx + fw]
 
         # 3. Screen Replay & Presentation Attack
-        replay_res = self.detect_screen_replay(face_crop)
+        replay_res = self.detect_screen_replay(face_crop, full_frame_bgr=img_bgr, face_box=face_box)
 
         # 4. Face-Swap & Boundary Artifacts
         swap_res = self.detect_face_swap_artifacts(img_bgr, face_box)
@@ -1356,18 +1389,10 @@ class LiveAuthenticityEngine:
         # 10. Headphone & Ear Accessory Detection
         ear_accessories = self.detect_headphones_and_ear_accessories(img_bgr, face_box)
 
-        # 11. Guided Interactive Protocol Evaluation (Smile, 3 Blinks, Smooth Rotation)
         # 10. Headphone & Ear Accessory Detection
         ear_accessories = self.detect_headphones_and_ear_accessories(img_bgr, face_box)
 
-        # 10b. Screen / Phone Detection & Screen-Face Association (STEPS 6, 7, 8)
-        screen_res = self._screen_detector.analyze(
-            img_bgr,
-            face_box=face_box,
-            temporal_jitter=physiological_jitter,
-        )
-
-        # 10c. Dedicated Eye Landmark & Quality Analysis (STEPS 1, 2)
+        # 10b. Dedicated Eye Landmark & Quality Analysis (STEPS 1, 2)
         eye_res = self._eye_analyzer.analyze(
             img_bgr,
             landmarks=landmarks,
@@ -1376,7 +1401,7 @@ class LiveAuthenticityEngine:
         )
         openness = eye_res["openness"]
 
-        # 10d. Biological Blink State Machine & 25s Challenge Timer (STEPS 3, 4, 5)
+        # 10c. Biological Blink State Machine & 25s Challenge Timer (STEPS 3, 4, 5)
         blink_res = self._blink_engine.update(
             session_id=session_id,
             openness=openness,
@@ -1384,7 +1409,7 @@ class LiveAuthenticityEngine:
             face_detected=True,
         )
 
-        # 11. Guided Interactive Protocol Evaluation (Smile, 3 Blinks, Smooth Rotation)
+        # 10d. Guided Interactive Protocol Evaluation (Smile, 3 Blinks, Smooth Rotation)
         blink_count_10s, blink_matched, blink_label = self.detect_and_count_blinks_10s(session_id, openness)
         movements_matched, movement_data = self.evaluate_head_movements_10s(session_id, pose)
         lips_matched, lips_data = self.evaluate_lips_alignment(landmarks)
@@ -1419,6 +1444,46 @@ class LiveAuthenticityEngine:
         )
         guided_protocol["total_marked"] = total_marked
         guided_protocol["all_marked"] = bool(total_marked == 3)
+
+        # ── 10e. DYNAMIC LIVENESS & SCREENPLAY DISPROOF METRICS ─────────────
+        sec_since_blink = float(blink_res.get("seconds_since_last_blink", 999.0))
+        is_blinking_regularly = bool(sec_since_blink <= 5.5 or (effective_blinks >= 1 and sec_since_blink <= 8.0))
+
+        yaws = [m["pose"]["yaw"] for m in buf] if buf else [pose["yaw"]]
+        pitches = [m["pose"]["pitch"] for m in buf] if buf else [pose["pitch"]]
+        rolls = [m["pose"].get("roll_rad", 0.0) for m in buf] if buf else [pose.get("roll_rad", 0.0)]
+        yaw_span = max(yaws) - min(yaws) if yaws else 0.0
+        pitch_span = max(pitches) - min(pitches) if pitches else 0.0
+        roll_span = max(rolls) - min(rolls) if rolls else 0.0
+        has_turned = bool(
+            yaw_span >= 7.0
+            or pitch_span >= 5.5
+            or roll_span >= 0.08
+            or d_yaw > 1.8
+            or d_pitch > 1.8
+            or movement_data.get("matched", False)
+            or guided_protocol["task_3_rotation"]["marked"]
+        )
+
+        box_xs = [m["box"][0] for m in buf] if buf else [face_box[0]]
+        box_ys = [m["box"][1] for m in buf] if buf else [face_box[1]]
+        slide_dist = math.hypot(max(box_xs) - min(box_xs), max(box_ys) - min(box_ys)) if box_xs else 0.0
+        has_slid = bool(slide_dist >= 12.0 or disp_rate > 0.20 or disp_px > 3.5)
+
+        # User's Rule: Freely turning face AND blinking eyes within every 5s disproves screen replay
+        is_liveness_proven = bool(has_turned and is_blinking_regularly)
+
+        # 10f. Screen / Phone Detection & Screen-Face Association (STEPS 6, 7, 8)
+        screen_res = self._screen_detector.analyze(
+            img_bgr,
+            face_box=face_box,
+            temporal_jitter=physiological_jitter,
+            is_liveness_proven=is_liveness_proven,
+        )
+        if is_liveness_proven:
+            presentation_risk = min(0.12, replay_res["replay_score"])
+        elif screen_res["presentation_attack"]:
+            presentation_risk = max(presentation_risk, screen_res["presentation_attack_confidence"])
 
         # Signal Telemetry
         fused_signals.append({
@@ -1490,7 +1555,7 @@ class LiveAuthenticityEngine:
         user_message = None
 
         # ── CASE 2: PRIMARY RULE — PHONE / SCREEN PRESENTATION ATTACK ───────
-        if screen_res["presentation_attack"]:
+        if (screen_res["presentation_attack"] or presentation_risk >= 0.55) and not is_liveness_proven:
             # Hard 0 live-human confidence, 100% presentation risk
             confidence = 0.0
             liveness_score = 0.0
@@ -1504,6 +1569,47 @@ class LiveAuthenticityEngine:
             )
             user_message = "A face appears to be displayed through a phone or electronic screen."
             reliability = "HIGH"
+
+        # ── USER'S RULE: ACTIVE LIVENESS & PROGRESSIVE CONFIDENCE SCALING ───────
+        # "if the person is can freely turn around his face and blinking eyes in every 5 seconds atleast 
+        # its not a screen play or presntation and after this the confidence bar should go to 60 
+        # after that check livness of the person like is he sliding his face and moving around , blinking 
+        # and if any of this passes then scale confidence bar to 85 -95 range"
+        elif is_liveness_proven:
+            # Secondary dynamic liveness: sliding face, moving around, or multiple genuine blinks
+            has_continuous_liveness = bool(
+                has_slid
+                or effective_blinks >= 2
+                or guided_protocol["task_2_blinks"]["marked"]
+                or guided_protocol["task_3_rotation"]["marked"]
+                or yaw_span >= 14.0
+                or disp_rate > 0.22
+            )
+
+            if has_continuous_liveness:
+                # Scale confidence bar directly to the 85% - 95% range
+                calc_conf = 87.0 + min(7.5, (vitality_flux * 1.5) + (min(effective_blinks, 5) * 0.4)) + time_flux
+                confidence = round(float(max(85.0, min(95.0, calc_conf))), 1)
+                category_label = "Real human face"
+                assessment = "REAL_HUMAN_FACE"
+                explanation = (
+                    "Active dynamic liveness verified: smooth facial sliding, natural head movement, "
+                    "and genuine eye blinks confirmed."
+                )
+                user_message = "All liveness criteria verified successfully."
+                reliability = "HIGH" if quality["quality_index"] >= 50 else "MEDIUM"
+            else:
+                # Baseline confidence goes to 60%
+                calc_conf = 60.0 + min(4.5, vitality_flux * 1.0) + time_flux
+                confidence = round(float(max(60.0, min(65.0, calc_conf))), 1)
+                category_label = "Human face detected"
+                assessment = "HUMAN_FACE_DETECTED"
+                explanation = (
+                    "Natural facial turning and regular eye blinks verified (Non-attack confirmed). "
+                    "Slide your face or blink again to reach >85% confidence."
+                )
+                user_message = "Active presence verified. Move or slide face to complete verification."
+                reliability = "MEDIUM" if quality["quality_index"] >= 50 else "LOW"
 
         # ── CASE 3: EYES BLURRY OR NOT VISIBLE ──────────────────────────────
         elif eye_res["is_blurry"] or eye_res["eye_status"] in (EYE_TOO_BLURRY, BOTH_EYES_NOT_VISIBLE, EYES_OBSCURED):
@@ -1571,7 +1677,12 @@ class LiveAuthenticityEngine:
         # Apply Temporal Confidence Smoothing (EMA, alpha=0.35)
         if assessment != "POSSIBLE_REPLAY":
             prev_conf = self._session_smoothed_confidence.get(session_id, confidence)
-            smoothed_conf = round(float(0.35 * confidence + 0.65 * prev_conf), 1)
+            if prev_conf == 0.0 and confidence >= 60.0:
+                smoothed_conf = confidence
+            elif assessment == "REAL_HUMAN_FACE" and confidence >= 85.0 and prev_conf < 85.0:
+                smoothed_conf = round(float(max(85.0, min(95.0, 0.75 * confidence + 0.25 * prev_conf))), 1)
+            else:
+                smoothed_conf = round(float(0.35 * confidence + 0.65 * prev_conf), 1)
             self._session_smoothed_confidence[session_id] = smoothed_conf
             confidence = smoothed_conf
         else:

@@ -47,7 +47,7 @@ export const GlassTabs: React.FC<GlassTabsProps> = ({
               <span
                 className={clsx(
                   'text-[10px] px-1.5 py-0.2 rounded-full font-mono',
-                  isActive ? 'bg-brand-blue text-white' : 'bg-white/10 text-white/60'
+                  isActive ? 'bg-white text-black font-bold' : 'bg-white/10 text-white/60'
                 )}
               >
                 {tab.badge}

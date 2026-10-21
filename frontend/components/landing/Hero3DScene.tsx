@@ -133,7 +133,7 @@ export const Hero3DScene: React.FC = () => {
         />
 
         {/* ── FLOATING 3D SPHERES / BIOMETRIC NODES (Multi-Depth) ── */}
-        {/* Orb 1: Upper Left Floating Glass Orb */}
+        {/* Orb 1: Upper Left Floating Glass Orb (Monochrome Porcelain) */}
         <motion.div
           className="absolute left-[8%] top-[14%] w-14 h-14 rounded-full pointer-events-none"
           style={{
@@ -141,13 +141,13 @@ export const Hero3DScene: React.FC = () => {
             y: orb1Y,
             transform: 'translateZ(130px)',
             background:
-              'radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.95), rgba(94, 167, 255, 0.7) 40%, rgba(13, 17, 28, 0.9) 85%)',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.6), 0 0 25px rgba(94, 167, 255, 0.35)',
-            border: '1px solid rgba(255, 255, 255, 0.3)',
+              'radial-gradient(circle at 35% 35%, #FFFFFF, #E4E4E7 40%, #18181B 85%)',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.85), 0 0 25px rgba(255, 255, 255, 0.25)',
+            border: '1px solid rgba(255, 255, 255, 0.35)',
           }}
         />
 
-        {/* Orb 2: Lower Right Warm Terracotta / Amber Orb (Matching Reference) */}
+        {/* Orb 2: Lower Right Sculpted Platinum Orb */}
         <motion.div
           className="absolute right-[6%] bottom-[12%] w-20 h-20 rounded-full pointer-events-none"
           style={{
@@ -155,8 +155,8 @@ export const Hero3DScene: React.FC = () => {
             y: orb2Y,
             transform: 'translateZ(160px)',
             background:
-              'radial-gradient(circle at 30% 30%, #FFFFFF, #D4A373 35%, #9B7CFF 70%, #05070D 95%)',
-            boxShadow: '0 24px 50px rgba(0,0,0,0.7), 0 0 30px rgba(155, 124, 255, 0.3)',
+              'radial-gradient(circle at 30% 30%, #FFFFFF, #D4D4D8 35%, #52525B 70%, #000000 95%)',
+            boxShadow: '0 24px 50px rgba(0,0,0,0.85), 0 0 30px rgba(255, 255, 255, 0.18)',
             border: '1px solid rgba(255, 255, 255, 0.25)',
           }}
         />
@@ -169,8 +169,8 @@ export const Hero3DScene: React.FC = () => {
             y: orb3Y,
             transform: 'translateZ(70px)',
             background:
-              'radial-gradient(circle at 35% 35%, #FFFFFF, #5EA7FF 60%, #0D111C 90%)',
-            boxShadow: '0 10px 25px rgba(94, 167, 255, 0.4)',
+              'radial-gradient(circle at 35% 35%, #FFFFFF, #A1A1AA 60%, #0A0A0A 90%)',
+            boxShadow: '0 10px 25px rgba(255, 255, 255, 0.25)',
           }}
         />
 
@@ -188,15 +188,15 @@ export const Hero3DScene: React.FC = () => {
             rotateZ: -4,
             background:
               'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
-            boxShadow: '0 25px 60px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.2)',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.2)',
           }}
         >
-          {/* Flowing Metallic Ribbon Across Card (Matching Reference Wave) */}
+          {/* Flowing Metallic Ribbon Across Card (High-Contrast White Specular) */}
           <div
             className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-14 pointer-events-none opacity-80"
             style={{
               background:
-                'linear-gradient(90deg, transparent 0%, rgba(94, 167, 255, 0.25) 30%, rgba(255, 255, 255, 0.5) 50%, rgba(94, 167, 255, 0.25) 70%, transparent 100%)',
+                'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.12) 30%, rgba(255, 255, 255, 0.5) 50%, rgba(255, 255, 255, 0.12) 70%, transparent 100%)',
               filter: 'blur(3px)',
               transform: 'rotate(-14deg) skewX(-12deg)',
             }}
@@ -204,7 +204,7 @@ export const Hero3DScene: React.FC = () => {
 
           <div className="relative z-10 space-y-3 text-left">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-brand-blue">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-white/90">
                 YuNet Biometrics
               </span>
               <span className="w-2 h-2 rounded-full bg-status-safe shadow-[0_0_8px_#4ADE80]" />
@@ -218,7 +218,7 @@ export const Hero3DScene: React.FC = () => {
               Continuous landmark vector tracking with smooth physiological micro-motion estimation.
             </p>
 
-            <div className="pt-1 flex items-center gap-2 text-[10px] font-mono text-brand-blue">
+            <div className="pt-1 flex items-center gap-2 text-[10px] font-mono text-white/80">
               <CheckCircle2 className="w-3.5 h-3.5 text-status-safe" />
               <span>Organic Face Trajectory</span>
             </div>
@@ -239,15 +239,15 @@ export const Hero3DScene: React.FC = () => {
             rotateZ: 4,
             background:
               'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
-            boxShadow: '0 25px 60px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.2)',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.2)',
           }}
         >
-          {/* Flowing Violet / Gold Specular Ribbon */}
+          {/* Flowing Specular Ribbon */}
           <div
             className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-14 pointer-events-none opacity-80"
             style={{
               background:
-                'linear-gradient(90deg, transparent 0%, rgba(155, 124, 255, 0.25) 30%, rgba(255, 255, 255, 0.45) 50%, rgba(155, 124, 255, 0.25) 70%, transparent 100%)',
+                'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.12) 30%, rgba(255, 255, 255, 0.5) 50%, rgba(255, 255, 255, 0.12) 70%, transparent 100%)',
               filter: 'blur(3px)',
               transform: 'rotate(16deg) skewX(10deg)',
             }}
@@ -255,10 +255,10 @@ export const Hero3DScene: React.FC = () => {
 
           <div className="relative z-10 space-y-3 text-left">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-brand-violet">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-white/90">
                 Silent-Face PAD
               </span>
-              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-brand-violet/20 text-brand-violet border border-brand-violet/30">
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-white/10 text-white border border-white/20">
                 2D-FFT SPECTRA
               </span>
             </div>
@@ -271,8 +271,8 @@ export const Hero3DScene: React.FC = () => {
               Dual-scale 2D-FFT frequency spectra to catch electronic moiré replay patterns.
             </p>
 
-            <div className="pt-1 flex items-center gap-2 text-[10px] font-mono text-white/50">
-              <Lock className="w-3.5 h-3.5 text-brand-violet" />
+            <div className="pt-1 flex items-center gap-2 text-[10px] font-mono text-white/60">
+              <Lock className="w-3.5 h-3.5 text-white/80" />
               <span>Anti-Presentation Attack</span>
             </div>
           </div>
@@ -291,11 +291,11 @@ export const Hero3DScene: React.FC = () => {
             rotateY: card3RotY,
             rotateZ: 2,
             background:
-              'linear-gradient(135deg, rgba(255, 255, 255, 0.09) 0%, rgba(13, 17, 28, 0.85) 100%)',
-            boxShadow: '0 30px 70px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.2)',
+              'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(10, 10, 10, 0.95) 100%)',
+            boxShadow: '0 30px 70px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.2)',
           }}
         >
-          {/* Speckled Terrazzo Texture (Inspired by Reference Tile Texture) */}
+          {/* Speckled Terrazzo Texture */}
           <div
             className="absolute inset-0 rounded-3xl opacity-20 pointer-events-none"
             style={{
@@ -305,12 +305,12 @@ export const Hero3DScene: React.FC = () => {
             }}
           />
 
-          {/* Golden / Amber Curvilinear Ribbon */}
+          {/* Specular Curvilinear Ribbon */}
           <div
             className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-12 pointer-events-none opacity-70"
             style={{
               background:
-                'linear-gradient(90deg, transparent 0%, rgba(212, 163, 115, 0.3) 30%, rgba(255, 255, 255, 0.45) 50%, rgba(212, 163, 115, 0.3) 70%, transparent 100%)',
+                'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.12) 30%, rgba(255, 255, 255, 0.5) 50%, rgba(255, 255, 255, 0.12) 70%, transparent 100%)',
               filter: 'blur(3px)',
               transform: 'rotate(-10deg)',
             }}
@@ -321,7 +321,7 @@ export const Hero3DScene: React.FC = () => {
               <span className="text-[10px] font-mono uppercase tracking-wider text-white/50">
                 Spatial Forensics
               </span>
-              <span className="text-[10px] font-mono font-bold text-brand-blue">ELA / DCT</span>
+              <span className="text-[10px] font-mono font-bold text-white">ELA / DCT</span>
             </div>
 
             <div className="flex items-baseline gap-2">
@@ -353,7 +353,7 @@ export const Hero3DScene: React.FC = () => {
             rotateZ: -3,
             background:
               'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
-            boxShadow: '0 30px 70px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.2)',
+            boxShadow: '0 30px 70px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.2)',
           }}
         >
           {/* Specular Wave */}
@@ -361,7 +361,7 @@ export const Hero3DScene: React.FC = () => {
             className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-14 pointer-events-none opacity-80"
             style={{
               background:
-                'linear-gradient(90deg, transparent 0%, rgba(56, 189, 248, 0.25) 30%, rgba(255, 255, 255, 0.5) 50%, rgba(56, 189, 248, 0.25) 70%, transparent 100%)',
+                'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.12) 30%, rgba(255, 255, 255, 0.5) 50%, rgba(255, 255, 255, 0.12) 70%, transparent 100%)',
               filter: 'blur(3px)',
               transform: 'rotate(-20deg)',
             }}
@@ -369,10 +369,10 @@ export const Hero3DScene: React.FC = () => {
 
           <div className="relative z-10 space-y-3 text-left">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-brand-cyan">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-white/80">
                 Texture Variance
               </span>
-              <span className="w-2 h-2 rounded-full bg-brand-cyan shadow-[0_0_8px_#38BDF8]" />
+              <span className="w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#FFFFFF]" />
             </div>
 
             <div className="flex items-baseline gap-2">
@@ -384,7 +384,7 @@ export const Hero3DScene: React.FC = () => {
             </p>
 
             <div className="pt-1 flex items-center gap-2 text-[10px] font-mono text-white/50">
-              <Cpu className="w-3.5 h-3.5 text-brand-cyan" />
+              <Cpu className="w-3.5 h-3.5 text-white/80" />
               <span>Edge Density Consistency</span>
             </div>
           </div>
@@ -393,7 +393,7 @@ export const Hero3DScene: React.FC = () => {
         {/* ── CENTRAL HERO CARD: PRIVACY EYE AUTHENTICITY ENGINE ── */}
         {/* Floating proudly in the foreground with strong depth (translateZ: 90px) */}
         <motion.div
-          className="relative z-30 w-full max-w-md md:max-w-lg rounded-4xl p-8 md:p-10 border border-white/22 shadow-glass-floating backdrop-blur-3xl overflow-hidden group"
+          className="relative z-30 w-full max-w-md md:max-w-lg rounded-4xl p-8 md:p-10 border border-white/20 shadow-glass-floating backdrop-blur-3xl overflow-hidden group"
           style={{
             transform: 'translateZ(90px)',
             translateZ: centerTranslateZ,
@@ -401,17 +401,17 @@ export const Hero3DScene: React.FC = () => {
             rotateX: centerRotateX,
             rotateY: centerRotateY,
             background:
-              'linear-gradient(135deg, rgba(13, 17, 28, 0.85) 0%, rgba(8, 11, 18, 0.92) 100%)',
+              'linear-gradient(135deg, rgba(12, 12, 12, 0.94) 0%, rgba(4, 4, 4, 0.98) 100%)',
             boxShadow:
-              '0 35px 80px rgba(0, 0, 0, 0.8), 0 0 50px rgba(94, 167, 255, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
+              '0 35px 80px rgba(0, 0, 0, 0.95), 0 0 50px rgba(255, 255, 255, 0.05), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
           }}
         >
-          {/* Ambient inner radial glow */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-brand-blue/15 rounded-full blur-[80px] pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-brand-violet/12 rounded-full blur-[80px] pointer-events-none" />
+          {/* Ambient inner radial glow (Subtle monochrome rim light) */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/[0.04] rounded-full blur-[80px] pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/[0.02] rounded-full blur-[80px] pointer-events-none" />
 
           {/* Micro-scanning radar sweep */}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-brand-cyan/[0.04] to-transparent pointer-events-none animate-scan-vertical" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/[0.03] to-transparent pointer-events-none animate-scan-vertical" />
 
           <div className="relative z-10 flex flex-col items-center text-center space-y-6">
             {/* Top Operational Pill */}
@@ -443,28 +443,25 @@ export const Hero3DScene: React.FC = () => {
               </div>
               <div className="flex items-center justify-between text-[11px] font-mono text-white/70">
                 <span>PRIVACY GUARANTEE:</span>
-                <span className="text-brand-cyan font-semibold">EPHEMERAL RAM BUFFER</span>
+                <span className="text-white font-semibold">EPHEMERAL RAM BUFFER</span>
               </div>
             </div>
 
-            {/* Glowing CTA Pill Button (Exact Match to Reference Floating Pill CTA!) */}
+            {/* High-Contrast Porcelain Pill Button (Matching Picture High-Contrast Style) */}
             <Link href="/dashboard/live-scan" className="w-full max-w-xs">
               <motion.button
                 whileHover={{ scale: 1.04, translateY: -2 }}
                 whileTap={{ scale: 0.96 }}
-                className="relative w-full py-3.5 px-8 rounded-full font-bold text-sm tracking-wide text-white transition-all flex items-center justify-center gap-2.5 shadow-2xl cursor-pointer"
+                className="relative w-full py-3.5 px-8 rounded-full font-bold text-sm tracking-wide text-black bg-white hover:bg-neutral-200 transition-all flex items-center justify-center gap-2.5 shadow-2xl cursor-pointer"
                 style={{
-                  background:
-                    'linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(94, 167, 255, 0.45) 50%, rgba(155, 124, 255, 0.4) 100%)',
                   boxShadow:
-                    '0 12px 35px rgba(94, 167, 255, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.6)',
-                  border: '1px solid rgba(255, 255, 255, 0.4)',
-                  backdropFilter: 'blur(16px)',
+                    '0 12px 35px rgba(255, 255, 255, 0.22), inset 0 1px 1px rgba(255, 255, 255, 0.8)',
+                  border: '1px solid #FFFFFF',
                 }}
               >
-                <Camera className="w-4 h-4 text-white" />
+                <Camera className="w-4 h-4 text-black" />
                 <span>Start Live Scan</span>
-                <ArrowRight className="w-3.5 h-3.5 text-white/70" />
+                <ArrowRight className="w-3.5 h-3.5 text-black/70" />
               </motion.button>
             </Link>
 
