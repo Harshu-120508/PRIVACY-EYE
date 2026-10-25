@@ -22,8 +22,16 @@ interface LoginForm {
 function LoginFormContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const nextUrl = searchParams.get('next') || '/dashboard'
-  const { login } = useAuth()
+  const rawNext = searchParams.get('next')
+  const nextUrl = rawNext && !rawNext.startsWith('/auth') ? rawNext : '/dashboard'
+  const { login, isAuthenticated, isLoading } = useAuth()
+
+  // If already authenticated, redirect straight to dashboard
+  React.useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace(nextUrl)
+    }
+  }, [isAuthenticated, isLoading, nextUrl, router])
 
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -42,7 +50,7 @@ function LoginFormContent() {
     try {
       await login(data.email, data.password, data.remember_me)
       toast.success('Authentication confirmed.')
-      router.push(nextUrl)
+      router.replace(nextUrl)
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {

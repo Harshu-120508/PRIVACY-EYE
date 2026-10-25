@@ -373,3 +373,30 @@ class UserConsentUpdateRequest(BaseModel):
     purpose: ConsentPurposeEnum
     granted: bool
     policy_version: str = "1.0.0"
+
+
+# ── Audit Trail & Sovereignty Schemas ────────────────────────────────────────
+
+class UserAuditLogItem(BaseModel):
+    id: str
+    action: str
+    resource_type: Optional[str] = None
+    resource_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    detail: Optional[Dict[str, Any]] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class UserAuditLogResponse(BaseModel):
+    items: List[UserAuditLogItem]
+    total: int
+    page: int
+    limit: int
+
+
+class PurgeHistoryResponse(BaseModel):
+    purged_count: int
+    message: str
+

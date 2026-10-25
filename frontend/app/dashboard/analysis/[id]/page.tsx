@@ -41,11 +41,6 @@ export default function AnalysisDetailPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!Cookies.get('access_token')) {
-      router.push('/auth/login')
-      return
-    }
-
     Promise.all([
       analysisApi.getAnalysis(id).then((r) => setAnalysis(r.data)),
       reportsApi.get(id).then((r) => setReport(r.data)).catch(() => {}),

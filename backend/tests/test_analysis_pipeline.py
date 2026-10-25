@@ -70,6 +70,27 @@ def _generate_test_wav() -> bytes:
     return wav_io.getvalue()
 
 
+def _generate_test_video() -> bytes:
+    """Generate a lightweight valid MP4 video clip with 5 frames."""
+    import tempfile, os
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
+        tmp_path = f.name
+    try:
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        out = cv2.VideoWriter(tmp_path, fourcc, 10.0, (120, 120))
+        for i in range(5):
+            frame = np.full((120, 120, 3), 60 + i * 10, dtype=np.uint8)
+            cv2.circle(frame, (60, 60), 20, (200, 160, 120), -1)
+            out.write(frame)
+        out.release()
+        with open(tmp_path, "rb") as rf:
+            return rf.read()
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+
 @pytest.mark.anyio
 async def test_image_analysis_pipeline(analysis_test_client: AsyncClient):
     """Test full image analysis pipeline lifecycle."""
@@ -176,3 +197,97 @@ async def test_analysis_validation_gates(analysis_test_client: AsyncClient):
     res = await analysis_test_client.post("/api/v1/analyze/image", files=files, headers=headers)
     assert res.status_code == 422
     assert "Unsupported file type" in res.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_video_analysis_pipeline(analysis_test_client: AsyncClient):
+    """Test full video analysis endpoint with valid MP4 clip."""
+    reg = await analysis_test_client.post("/api/v1/auth/register", json={
+        "email": "video_analyst@example.com",
+        "password": "Password123!",
+    })
+    token = reg.json()["tokens"]["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    mp4_bytes = _generate_test_video()
+    files = {"file": ("test_clip.mp4", mp4_bytes, "video/mp4")}
+
+    res = await analysis_test_client.post("/api/v1/analyze/video", files=files, headers=headers)
+    assert res.status_code == 201
+
+    data = res.json()
+    assert data["status"] == "COMPLETE"
+    assert data["media_type"] == "VIDEO"
+    assert data["original_filename"] == "test_clip.mp4"
+    assert data["risk_level"] is not None
+    assert 0.0 <= data["synthetic_probability"] <= 1.0
+    assert data["model_id"] is not None
+    assert data["prediction"] in ("AUTHENTIC", "MANIPULATED", "SUSPICIOUS", "UNDETERMINED")
+    assert isinstance(data["signals"], list)
+
+
+def test_video_analyzer_neural_fusion():
+    """Verify VideoAnalyzer neural ONNX fusion logic with mock session."""
+    from app.ml.video_analyzer import VideoAnalyzer
+
+    analyzer = VideoAnalyzer()
+    # 1. Test forensics fallback when session is None
+    analyzer.session = None
+    mp4_bytes = _generate_test_video()
+    res_forensics = analyzer.analyze(mp4_bytes, "clip.mp4")
+    assert res_forensics["model_id"] == "privacy-eye-forensics-video-v1"
+
+    # 2. Attach mock ONNX session and verify neural ensemble blending
+    class MockOnnxInput:
+        name = "input"
+        shape = (1, 3, 224, 224)
+
+    class MockOnnxSession:
+        def get_inputs(self):
+            return [MockOnnxInput()]
+
+        def run(self, output_names, input_feed):
+            # Logit for 0.85 synthetic probability
+            return [np.array([[2.0]], dtype=np.float32)]
+
+    analyzer.session = MockOnnxSession()
+    analyzer.input_name = "input"
+    analyzer.input_shape = (1, 3, 224, 224)
+
+    res_ensemble = analyzer.analyze(mp4_bytes, "clip.mp4")
+    assert res_ensemble["model_id"] == "privacy-eye-ensemble-video-v1"
+    assert res_ensemble["provenance"]["neural_model"] == "video_efficientnet_temporal"
+    assert any(s["key"] == "temporal_neural_classifier" for s in res_ensemble["signals"])
+
+
+def test_audio_analyzer_neural_fusion():
+    """Verify AudioAnalyzer neural ONNX fusion logic with mock session."""
+    from app.ml.audio_analyzer import AudioAnalyzer
+
+    analyzer = AudioAnalyzer()
+    # 1. Test forensics fallback when session is None
+    analyzer.session = None
+    wav_bytes = _generate_test_wav()
+    res_forensics = analyzer.analyze(wav_bytes, "voice.wav")
+    assert res_forensics["model_id"] == "privacy-eye-forensics-audio-v1"
+
+    # 2. Attach mock ONNX session and verify neural ensemble blending
+    class MockAudioSession:
+        def get_inputs(self):
+            class Inp:
+                name = "audio"
+                shape = (1, 48000)
+            return [Inp()]
+
+        def run(self, output_names, input_feed):
+            return [np.array([[0.1, 0.9]], dtype=np.float32)]
+
+    analyzer.session = MockAudioSession()
+    analyzer.input_name = "audio"
+    analyzer.input_shape = (1, 48000)
+
+    res_ensemble = analyzer.analyze(wav_bytes, "voice.wav")
+    assert res_ensemble["model_id"] == "privacy-eye-ensemble-audio-v1"
+    assert res_ensemble["provenance"]["neural_model"] == "audio_wav2vec2_clone"
+    assert any(s["key"] == "neural_voice_clone_discriminator" for s in res_ensemble["signals"])
+

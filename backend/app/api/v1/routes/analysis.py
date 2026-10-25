@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, update
 from sqlalchemy.orm import selectinload
 
 from app.database.session import get_db
@@ -31,7 +31,12 @@ from app.database.models import (
     UserConsent,
     ConsentPurpose,
 )
-from app.schemas.schemas import AnalysisResponse, AnalysisListResponse, DashboardStats
+from app.schemas.schemas import (
+    AnalysisResponse,
+    AnalysisListResponse,
+    DashboardStats,
+    PurgeHistoryResponse,
+)
 from app.core.security import get_current_user
 from app.core.config import settings
 from app.services.ml_service import ml_service
@@ -286,6 +291,38 @@ async def get_history(
     items = result.scalars().all()
 
     return AnalysisListResponse(items=list(items), total=total, page=page, per_page=per_page)
+
+
+@router.delete("/history/purge", response_model=PurgeHistoryResponse)
+async def purge_history(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Purge all analysis audit history for the current user.
+    Enforces GDPR Article 17 right to erasure across all past analysis records.
+    """
+    now = datetime.now(timezone.utc)
+    stmt = (
+        update(MediaAnalysis)
+        .where(MediaAnalysis.user_id == current_user.id, MediaAnalysis.deleted_at.is_(None))
+        .values(deleted_at=now)
+    )
+    result = await db.execute(stmt)
+    purged_count = result.rowcount
+
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="BULK_HISTORY_PURGED",
+        resource_type="MEDIA_ANALYSIS",
+        detail={"purged_count": purged_count},
+    ))
+    await db.commit()
+
+    return PurgeHistoryResponse(
+        purged_count=purged_count,
+        message=f"Successfully purged {purged_count} analysis audit records.",
+    )
 
 
 @router.get("/stats", response_model=DashboardStats)

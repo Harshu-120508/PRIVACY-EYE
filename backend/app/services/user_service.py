@@ -3,6 +3,7 @@ Privacy Eye — User & Session Database Service
 Handles Argon2id user registration, authentication verification, session lifecycle,
 token rotation, password changes, and account deletion with relational integrity.
 """
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple
@@ -10,7 +11,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_, delete
 import structlog
 
-from app.database.models import User, UserSession, UserPreferences, PasswordResetToken, AuditLog
+from app.database.models import (
+    User,
+    UserSession,
+    UserPreferences,
+    PasswordResetToken,
+    AuditLog,
+    FaceTrainingSample,
+    Report,
+)
 from app.schemas.schemas import UserRegisterRequest
 from app.core.security import (
     hash_password,
@@ -235,10 +244,59 @@ class UserService:
     async def delete_account(
         self, db: AsyncSession, user: User, password_confirmation: str
     ) -> bool:
-        """Verify password and delete user with full cascade."""
+        """
+        Verify password and execute full GDPR Article 17 Right to Erasure cascade:
+        1. Permanently removes biometric samples and physically unlinks face crops from disk.
+        2. Physically unlinks generated PDF report artifacts.
+        3. Cleans up any orphaned upload chunks.
+        4. Pseudonymizes / redacts historical audit entries so no plaintext PII remains.
+        5. Deletes User entity (cascades to analyses, signals, sessions, consents, preferences, api_keys).
+        """
         if not verify_password(password_confirmation, user.hashed_password):
             return False
 
+        user_id = user.id
+
+        # 1. Purge Face Training Samples & remove image crops from disk
+        training_samples = (
+            await db.execute(select(FaceTrainingSample).where(FaceTrainingSample.user_id == user_id))
+        ).scalars().all()
+        for sample in training_samples:
+            if sample.image_path:
+                try:
+                    if os.path.exists(sample.image_path):
+                        os.unlink(sample.image_path)
+                except Exception as e:
+                    logger.warning("Failed to unlink training face crop during erasure", path=sample.image_path, error=str(e))
+        await db.execute(delete(FaceTrainingSample).where(FaceTrainingSample.user_id == user_id))
+
+        # 2. Purge Report PDFs from disk
+        reports = (
+            await db.execute(select(Report).where(Report.user_id == user_id))
+        ).scalars().all()
+        for rep in reports:
+            if rep.pdf_path:
+                try:
+                    if os.path.exists(rep.pdf_path):
+                        os.unlink(rep.pdf_path)
+                except Exception as e:
+                    logger.warning("Failed to unlink report PDF during erasure", path=rep.pdf_path, error=str(e))
+
+        # 3. Clean up orphaned temp files
+        try:
+            from app.services.file_service import file_service
+            file_service.cleanup_orphaned_temp_files(max_age_seconds=0)
+        except Exception as e:
+            logger.warning("Temp cleanup during erasure error", error=str(e))
+
+        # 4. Redact PII from historical AuditLog entries
+        await db.execute(
+            update(AuditLog)
+            .where(AuditLog.user_id == user_id)
+            .values(user_id=None, ip_address="0.0.0.0", user_agent=None)
+        )
+
+        # 5. Cascading deletion of User
         await db.delete(user)
         await db.flush()
         return True

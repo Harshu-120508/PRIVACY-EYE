@@ -36,10 +36,6 @@ export default function ReportsPage() {
   const [activeReportDoc, setActiveReportDoc] = useState<{ analysis: Analysis; report?: Report } | null>(null)
 
   useEffect(() => {
-    if (!Cookies.get('access_token')) {
-      router.push('/auth/login')
-      return
-    }
     analysisApi
       .getHistory(1, 50)
       .then((r) => {
@@ -47,7 +43,7 @@ export default function ReportsPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [router])
+  }, [])
 
   const handleGenerate = async (id: string, a: Analysis) => {
     setGeneratingId(id)

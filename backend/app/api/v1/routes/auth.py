@@ -56,12 +56,12 @@ router = APIRouter()
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str, remember_me: bool = False):
     """Set secure authentication cookies on response."""
     is_prod = settings.APP_ENV == "production"
-    # Access token cookie (60 minutes)
+    # Access token cookie (60 minutes) - Set httponly=False so frontend JS and headers are fully synchronized
     response.set_cookie(
         key="access_token",
         value=access_token,
         max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        httponly=False,  # Accessible for client-side API interceptor & SSR hydration
+        httponly=False,
         secure=is_prod,
         samesite="lax",
         path="/",
@@ -77,6 +77,16 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str,
         samesite="lax",
         path="/",
     )
+    # Non-sensitive logged_in indicator for client-side UI hydration
+    response.set_cookie(
+        key="logged_in",
+        value="true",
+        max_age=refresh_max_age,
+        httponly=False,
+        secure=is_prod,
+        samesite="lax",
+        path="/",
+    )
 
 
 def _clear_auth_cookies(response: Response):
@@ -84,6 +94,7 @@ def _clear_auth_cookies(response: Response):
     is_prod = settings.APP_ENV == "production"
     response.delete_cookie(key="access_token", path="/", secure=is_prod, samesite="lax")
     response.delete_cookie(key="refresh_token", path="/", secure=is_prod, samesite="lax")
+    response.delete_cookie(key="logged_in", path="/", secure=is_prod, samesite="lax")
 
 
 # ── Core Authentication ──────────────────────────────────────────────────────

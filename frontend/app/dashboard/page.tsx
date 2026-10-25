@@ -69,12 +69,8 @@ export default function DashboardPage() {
   }, [router])
 
   useEffect(() => {
-    if (!Cookies.get('access_token')) {
-      router.push('/auth/login')
-      return
-    }
     loadDashboardData()
-  }, [loadDashboardData, router])
+  }, [loadDashboardData])
 
   const handleRefresh = () => {
     setRefreshing(true)

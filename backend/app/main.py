@@ -70,6 +70,11 @@ allowed_hosts = settings.ALLOWED_HOSTS
 if isinstance(allowed_hosts, str):
     allowed_hosts = [h.strip() for h in allowed_hosts.split(",") if h.strip()]
 
+# In production, restrict wildcard hosts to known deployment domains if unconfigured
+if settings.APP_ENV == "production" and (allowed_hosts == ["*"] or not allowed_hosts):
+    logger.warning("Wildcard ALLOWED_HOSTS detected in production; restricting to platform domains")
+    allowed_hosts = ["*.railway.app", "*.up.railway.app", "*.vercel.app", "localhost", "127.0.0.1"]
+
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=allowed_hosts,

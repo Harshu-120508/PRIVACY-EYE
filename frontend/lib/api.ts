@@ -14,7 +14,10 @@ export const api = axios.create({
 
 // Attach JWT and CSRF token on every request
 api.interceptors.request.use((config) => {
-  const token = Cookies.get('access_token')
+  let token = Cookies.get('access_token')
+  if (!token && typeof window !== 'undefined') {
+    token = localStorage.getItem('access_token') || undefined
+  }
   if (token) config.headers.Authorization = `Bearer ${token}`
   // Double-submit CSRF protection: send csrf_token cookie value as header
   const csrfToken = Cookies.get('csrf_token')
@@ -27,13 +30,21 @@ api.interceptors.response.use(
   (r) => r,
   async (err: AxiosError) => {
     if (err.response?.status === 401 && !err.config?.url?.includes('/auth/login') && !err.config?.url?.includes('/auth/refresh')) {
-      const refresh = Cookies.get('refresh_token')
+      const refresh = Cookies.get('refresh_token') || (typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null)
       try {
         const res = await axios.post(`${BASE_URL}/auth/refresh`, { refresh_token: refresh }, { withCredentials: true })
         const { access_token, refresh_token: new_refresh } = res.data
         Cookies.set('access_token', access_token, { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: 7 })
+        Cookies.set('logged_in', 'true', { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: 7 })
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('access_token', access_token)
+          localStorage.setItem('logged_in', 'true')
+        }
         if (new_refresh) {
           Cookies.set('refresh_token', new_refresh, { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: 30 })
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('refresh_token', new_refresh)
+          }
         }
         if (err.config) {
           err.config.headers.Authorization = `Bearer ${access_token}`
@@ -42,6 +53,12 @@ api.interceptors.response.use(
       } catch {
         Cookies.remove('access_token')
         Cookies.remove('refresh_token')
+        Cookies.remove('logged_in')
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
+          localStorage.removeItem('logged_in')
+        }
         if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth/')) {
           window.location.href = `/auth/login?next=${encodeURIComponent(window.location.pathname)}`
         }
@@ -74,13 +91,22 @@ export const authApi = {
     const tokens = res.data.tokens || res.data
     if (tokens?.access_token) {
       Cookies.set('access_token', tokens.access_token, { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: 30 })
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('access_token', tokens.access_token)
+      }
     }
     if (tokens?.refresh_token) {
       Cookies.set('refresh_token', tokens.refresh_token, { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: 30 })
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('refresh_token', tokens.refresh_token)
+      }
+    }
+    Cookies.set('logged_in', 'true', { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: 30 })
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('logged_in', 'true')
     }
     return res.data
   },
-
 
   login: async (email: string, password: string, remember_me: boolean = false) => {
     const res = await api.post('/auth/login', { email, password, remember_me })
@@ -88,9 +114,19 @@ export const authApi = {
     const expiresDays = remember_me ? 30 : 1
     if (tokens?.access_token) {
       Cookies.set('access_token', tokens.access_token, { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: expiresDays })
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('access_token', tokens.access_token)
+      }
     }
     if (tokens?.refresh_token) {
       Cookies.set('refresh_token', tokens.refresh_token, { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: expiresDays })
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('refresh_token', tokens.refresh_token)
+      }
+    }
+    Cookies.set('logged_in', 'true', { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: expiresDays })
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('logged_in', 'true')
     }
     return res.data
   },
@@ -105,6 +141,12 @@ export const authApi = {
     } finally {
       Cookies.remove('access_token')
       Cookies.remove('refresh_token')
+      Cookies.remove('logged_in')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        localStorage.removeItem('logged_in')
+      }
     }
   },
 
@@ -114,6 +156,12 @@ export const authApi = {
     } finally {
       Cookies.remove('access_token')
       Cookies.remove('refresh_token')
+      Cookies.remove('logged_in')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        localStorage.removeItem('logged_in')
+      }
     }
   },
 
@@ -188,7 +236,18 @@ export const analysisApi = {
 
   deleteAnalysis: (id: string) => api.delete(`/analyze/${id}`),
 
+  purgeAllHistory: () => api.delete('/analyze/history/purge'),
+
   getStats: () => api.get('/analyze/stats'),
+}
+
+// ── Users & Sovereignty ───────────────────────────────────────────────────────
+export const usersApi = {
+  getProfile: () => api.get('/users/me'),
+  updateProfile: (fullName: string) => api.patch('/users/me', null, { params: { full_name: fullName } }),
+  exportUserData: () => api.get('/users/me/export'),
+  getAuditLogs: (page = 1, limit = 20, action?: string) =>
+    api.get('/users/me/audit-logs', { params: { page, limit, action } }),
 }
 
 // ── Consents ──────────────────────────────────────────────────────────────────

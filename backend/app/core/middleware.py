@@ -143,13 +143,15 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
     def _set_csrf_cookie(self, response: Response) -> None:
         """Set a fresh CSRF token cookie on the response (readable by JS)."""
+        from app.core.config import settings
+        is_prod = settings.APP_ENV == "production"
         token = secrets.token_urlsafe(32)
         response.set_cookie(
             key="csrf_token",
             value=token,
-            httponly=False,  # Must be readable by JavaScript
+            httponly=False,  # Must be readable by JavaScript for double-submit
             samesite="lax",
-            secure=False,  # Set to True in production behind HTTPS
+            secure=is_prod,
             max_age=86400,  # 24 hours
             path="/",
         )

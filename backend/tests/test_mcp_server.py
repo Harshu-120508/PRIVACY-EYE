@@ -42,6 +42,28 @@ def _create_test_audio_b64() -> str:
     return base64.b64encode(wav_io.getvalue()).decode("utf-8")
 
 
+def _create_test_video_b64() -> str:
+    """Generate a valid base64 MP4 video."""
+    import tempfile, os
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
+        tmp_path = f.name
+    try:
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        out = cv2.VideoWriter(tmp_path, fourcc, 10.0, (120, 120))
+        for i in range(5):
+            frame = np.full((120, 120, 3), 60 + i * 10, dtype=np.uint8)
+            cv2.circle(frame, (60, 60), 20, (180, 160, 140), -1)
+            out.write(frame)
+        out.release()
+        with open(tmp_path, "rb") as rf:
+            raw = rf.read()
+            return base64.b64encode(raw).decode("utf-8")
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+
 @pytest.mark.anyio
 async def test_mcp_get_detection_capabilities():
     """Verify MCP detection capabilities tool."""
@@ -117,6 +139,35 @@ async def test_mcp_analyze_audio_success():
     assert result["prediction"] is not None
     assert result["confidence_score"] >= 0.0
     assert result["limitations"] is not None
+
+
+@pytest.mark.anyio
+async def test_mcp_analyze_video_success():
+    """Verify successful video analysis through MCP analyze_video."""
+    vid_b64 = _create_test_video_b64()
+    result = await analyze_video(video_base64=vid_b64, filename="sample.mp4")
+
+    assert result["status"] == "COMPLETED"
+    assert result["media_type"] == "VIDEO"
+    assert result["model_id"] is not None
+    assert result["prediction"] in ("AUTHENTIC", "MANIPULATED", "SUSPICIOUS", "UNDETERMINED")
+    assert 0.0 <= result["synthetic_probability"] <= 1.0
+    assert result["confidence_score"] >= 0.0
+    assert result["limitations"] is not None
+    assert isinstance(result["signals"], list)
+
+
+@pytest.mark.anyio
+async def test_mcp_analyze_video_invalid_payload():
+    """Verify video error handling on corrupted base64 or non-video bytes."""
+    res_malformed = await analyze_video(video_base64="not-a-valid-base64-payload!")
+    assert res_malformed["status"] == "FAILED"
+    assert res_malformed["error_code"] == "ERR_MCP_VIDEO_ANALYSIS_FAILED"
+
+    txt_b64 = base64.b64encode(b"not a video file payload").decode("utf-8")
+    res_invalid_type = await analyze_video(video_base64=txt_b64)
+    assert res_invalid_type["status"] == "FAILED"
+    assert "File signature does not match" in res_invalid_type["error_message"]
 
 
 @pytest.mark.anyio

@@ -30,6 +30,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null)
       Cookies.remove('access_token')
       Cookies.remove('refresh_token')
+      Cookies.remove('logged_in')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        localStorage.removeItem('logged_in')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -37,7 +43,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // Initial session hydration on application startup
-    const hasToken = Cookies.get('access_token') || Cookies.get('refresh_token')
+    const hasToken =
+      Cookies.get('logged_in') ||
+      Cookies.get('access_token') ||
+      Cookies.get('refresh_token') ||
+      (typeof window !== 'undefined' && (localStorage.getItem('access_token') || localStorage.getItem('logged_in')))
     if (hasToken) {
       refreshUser()
     } else {

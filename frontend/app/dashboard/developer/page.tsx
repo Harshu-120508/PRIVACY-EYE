@@ -27,6 +27,7 @@ export default function DeveloperPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [apiKey, setApiKey] = useState<string>('')
   const [copied, setCopied] = useState(false)
+  const [mcpCopied, setMcpCopied] = useState(false)
 
   useEffect(() => {
     // Generate or retrieve persistent API key tied to the authenticated user ID
@@ -215,6 +216,105 @@ export default function DeveloperPage() {
             <p className="text-white/60 font-sans text-xs">
               Retrieve full forensic breakdown, individual signal matrices, and SHA-256 cryptographic provenance.
             </p>
+          </div>
+        </div>
+      </GlassCard>
+
+      {/* ── MODEL CONTEXT PROTOCOL (MCP) INTEGRATION ── */}
+      <GlassCard variant="elevated" className="p-6 md:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/6">
+          <div className="flex items-center gap-2.5">
+            <Terminal className="w-5 h-5 text-brand-cyan" />
+            <div>
+              <h2 className="text-base font-bold text-white">Model Context Protocol (MCP) Server</h2>
+              <p className="text-xs text-white/50">Expose deepfake forensics directly to Claude Desktop, Cursor, or AI agents</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <GlassBadge status="safe" label="8 TOOLS ACTIVE" />
+            <GlassBadge status="neutral" label="STDIO & SSE" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <h3 className="text-xs font-mono uppercase tracking-wider text-white/70">Exposed MCP Tools</h3>
+            <div className="p-4 rounded-2xl glass-surface border border-white/8 space-y-2 text-xs font-mono">
+              <div className="flex items-center justify-between text-white/90">
+                <span className="text-brand-cyan">analyze_image</span>
+                <span className="text-[10px] text-white/40">2D-FFT · ELA · Neural</span>
+              </div>
+              <div className="flex items-center justify-between text-white/90">
+                <span className="text-brand-cyan">analyze_video</span>
+                <span className="text-[10px] text-white/40">Temporal · 8x8 DCT</span>
+              </div>
+              <div className="flex items-center justify-between text-white/90">
+                <span className="text-brand-cyan">analyze_audio</span>
+                <span className="text-[10px] text-white/40">Log-Mel · Voice Clone</span>
+              </div>
+              <div className="flex items-center justify-between text-white/90">
+                <span className="text-white/70">get_detection_capabilities</span>
+                <span className="text-[10px] text-white/40">Algorithms & Bounds</span>
+              </div>
+              <div className="flex items-center justify-between text-white/90">
+                <span className="text-white/70">get_analysis_status</span>
+                <span className="text-[10px] text-white/40">Execution Polling</span>
+              </div>
+              <div className="flex items-center justify-between text-white/90">
+                <span className="text-white/70">get_analysis_result</span>
+                <span className="text-[10px] text-white/40">Full Forensic Signals</span>
+              </div>
+              <div className="flex items-center justify-between text-white/90">
+                <span className="text-white/70">get_model_status</span>
+                <span className="text-[10px] text-white/40">Registry & Checksums</span>
+              </div>
+              <div className="flex items-center justify-between text-white/90">
+                <span className="text-white/70">get_privacy_settings</span>
+                <span className="text-[10px] text-white/40">Zero-Retention Policy</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-mono uppercase tracking-wider text-white/70">Claude Desktop / Cursor Config</h3>
+              <button
+                onClick={() => {
+                  const cfg = JSON.stringify({
+                    mcpServers: {
+                      "privacy-eye": {
+                        command: "python",
+                        args: ["-m", "app.mcp.server"],
+                        cwd: "C:\\Users\\harsh\\PRIVACY-EYE\\backend",
+                        env: { PYTHONPATH: "C:\\Users\\harsh\\PRIVACY-EYE\\backend" }
+                      }
+                    }
+                  }, null, 2)
+                  navigator.clipboard.writeText(cfg)
+                  setMcpCopied(true)
+                  toast.success('MCP config copied to clipboard')
+                  setTimeout(() => setMcpCopied(false), 2000)
+                }}
+                className="text-xs font-mono text-brand-cyan hover:underline flex items-center gap-1"
+              >
+                {mcpCopied ? <Check className="w-3.5 h-3.5 text-status-safe" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{mcpCopied ? 'Copied' : 'Copy JSON'}</span>
+              </button>
+            </div>
+            <pre className="p-4 rounded-2xl glass-surface border border-white/8 text-[11px] font-mono text-white/80 overflow-x-auto">
+{`{
+  "mcpServers": {
+    "privacy-eye": {
+      "command": "python",
+      "args": ["-m", "app.mcp.server"],
+      "cwd": "backend",
+      "env": {
+        "PYTHONPATH": "backend"
+      }
+    }
+  }
+}`}
+            </pre>
           </div>
         </div>
       </GlassCard>

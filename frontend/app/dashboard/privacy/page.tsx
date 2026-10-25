@@ -25,7 +25,7 @@ import {
 import toast from 'react-hot-toast'
 import Cookies from 'js-cookie'
 
-import { authApi, liveScanApi, analysisApi, consentsApi } from '@/lib/api'
+import { authApi, liveScanApi, analysisApi, consentsApi, usersApi } from '@/lib/api'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { GlassButton } from '@/components/ui/GlassButton'
 import { GlassBadge } from '@/components/ui/GlassBadge'
@@ -106,14 +106,17 @@ export default function PrivacyCenterPage() {
     MODEL_TRAINING: false,
     ANALYTICS: false,
   })
+  const [recentLogs, setRecentLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (!Cookies.get('access_token')) {
-      router.push('/auth/login')
-      return
-    }
+  const fetchAuditLogs = () => {
+    usersApi
+      .getAuditLogs(1, 5)
+      .then((res) => setRecentLogs(res.data.items || []))
+      .catch(() => {})
+  }
 
+  useEffect(() => {
     if (navigator.permissions && navigator.permissions.query) {
       navigator.permissions
         .query({ name: 'camera' as any })
@@ -133,6 +136,9 @@ export default function PrivacyCenterPage() {
         })
         setConsents((prev) => ({ ...prev, ...map }))
       }).catch(() => {}),
+      usersApi.getAuditLogs(1, 5).then((res) => {
+        setRecentLogs(res.data.items || [])
+      }).catch(() => {}),
     ]).finally(() => setLoading(false))
   }, [router])
 
@@ -142,6 +148,7 @@ export default function PrivacyCenterPage() {
     try {
       await consentsApi.updateConsent(purpose, newVal)
       toast.success(newVal ? `Consent granted for ${purpose}` : `Consent withdrawn for ${purpose}`)
+      fetchAuditLogs()
     } catch {
       setConsents((prev) => ({ ...prev, [purpose]: currentVal }))
       toast.error('Failed to update server-side consent decision.')
@@ -150,18 +157,20 @@ export default function PrivacyCenterPage() {
 
   const handleDownloadUserData = async () => {
     try {
-      const res = await analysisApi.getHistory(1, 100)
+      toast.loading('Generating GDPR Article 20 data export archive...', { id: 'export-toast' })
+      const res = await usersApi.exportUserData()
       const dataStr = JSON.stringify(res.data, null, 2)
       const blob = new Blob([dataStr], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `privacy-eye-account-archive-${new Date().toISOString().slice(0, 10)}.json`
+      a.download = `privacy-eye-gdpr-data-archive-${new Date().toISOString().slice(0, 10)}.json`
       a.click()
       URL.revokeObjectURL(url)
-      toast.success('Account forensic archive downloaded')
+      toast.success('GDPR data portability archive downloaded successfully', { id: 'export-toast' })
+      fetchAuditLogs()
     } catch {
-      toast.error('Failed to export account archive')
+      toast.error('Failed to export account archive', { id: 'export-toast' })
     }
   }
 
@@ -174,14 +183,10 @@ export default function PrivacyCenterPage() {
       return
     }
     try {
-      const res = await analysisApi.getHistory(1, 100)
-      const items = res.data.items || []
-      if (items.length === 0) {
-        toast.success('No analysis records found to purge.')
-        return
-      }
-      await Promise.all(items.map((item: any) => analysisApi.deleteAnalysis(item.id)))
-      toast.success(`Purge complete. ${items.length} analysis audit records erased.`)
+      const res = await analysisApi.purgeAllHistory()
+      const count = res.data.purged_count ?? 0
+      toast.success(`Purge complete. ${count} analysis audit records erased from database.`)
+      fetchAuditLogs()
     } catch {
       toast.error('Failed to execute purge request')
     }
@@ -447,6 +452,45 @@ export default function PrivacyCenterPage() {
             Purge All Analysis Records
           </GlassButton>
         </div>
+      </GlassCard>
+
+      {/* ── SECTION: AUDIT TRAIL & LOGS ── */}
+      <GlassCard variant="elevated" className="p-6 md:p-8 space-y-6">
+        <div className="flex items-center justify-between pb-3 border-b border-white/6">
+          <div className="flex items-center gap-3">
+            <Layers className="w-5 h-5 text-brand-blue" />
+            <div>
+              <h2 className="text-base font-bold text-white">Personal Security Audit Trail</h2>
+              <p className="text-xs text-white/50">Immutable chronological record of security and consent events</p>
+            </div>
+          </div>
+          <GlassBadge status="safe" label="TAMPER EVIDENT" />
+        </div>
+
+        {recentLogs.length > 0 ? (
+          <div className="space-y-2">
+            {recentLogs.map((log: any) => (
+              <div
+                key={log.id}
+                className="flex items-center justify-between p-3 rounded-2xl bg-white/4 border border-white/6 text-xs font-mono"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="w-2 h-2 rounded-full bg-brand-blue" />
+                  <span className="text-white font-bold">{log.action}</span>
+                  {log.resource_type && (
+                    <span className="text-white/40 text-[11px]">({log.resource_type})</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-4 text-white/50 text-[11px]">
+                  <span>{log.ip_address || 'Internal/Client'}</span>
+                  <span>{new Date(log.created_at).toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-white/40 font-mono italic">No security audit events recorded yet.</p>
+        )}
       </GlassCard>
     </div>
   )

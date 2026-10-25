@@ -7,6 +7,7 @@ Verifies:
 - Server-side enforcement: omitting history retention when SAVE_HISTORY is withdrawn
 - Re-granting consent and audit log generation
 """
+import io
 import pytest
 import numpy as np
 import cv2
@@ -141,3 +142,62 @@ async def test_server_side_consent_enforcement(consent_test_client: AsyncClient)
     hist_res = await consent_test_client.get("/api/v1/analyze/history", headers=headers)
     assert hist_res.status_code == 200
     assert hist_res.json()["total"] == 0
+
+
+@pytest.mark.anyio
+async def test_video_and_audio_consent_enforcement(consent_test_client: AsyncClient):
+    """Verify server-side consent enforcement across video and audio pipelines."""
+    import wave
+
+    reg = await consent_test_client.post("/api/v1/auth/register", json={
+        "email": "multimodal_consent@example.com",
+        "password": "Password123!",
+        "full_name": "Multimodal Consent User",
+    })
+    token = reg.json()["tokens"]["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Generate test WAV
+    wav_io = io.BytesIO()
+    with wave.open(wav_io, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(16000)
+        wf.writeframes(b"\x00\x00" * 4000)
+    wav_bytes = wav_io.getvalue()
+
+    # 1. Withdraw MEDIA_PROCESSING consent
+    await consent_test_client.put(
+        "/api/v1/users/me/consents",
+        json={"purpose": "MEDIA_PROCESSING", "granted": False, "policy_version": "1.0.0"},
+        headers=headers,
+    )
+
+    # 2. Audio upload must be blocked with 403 Forbidden
+    audio_files = {"file": ("test_voice.wav", wav_bytes, "audio/wav")}
+    audio_block = await consent_test_client.post("/api/v1/analyze/audio", files=audio_files, headers=headers)
+    assert audio_block.status_code == 403
+    assert "Media processing consent is currently withdrawn" in audio_block.json()["detail"]
+
+    # 3. Re-grant MEDIA_PROCESSING but withdraw SAVE_HISTORY
+    await consent_test_client.put(
+        "/api/v1/users/me/consents",
+        json={"purpose": "MEDIA_PROCESSING", "granted": True, "policy_version": "1.0.0"},
+        headers=headers,
+    )
+    await consent_test_client.put(
+        "/api/v1/users/me/consents",
+        json={"purpose": "SAVE_HISTORY", "granted": False, "policy_version": "1.0.0"},
+        headers=headers,
+    )
+
+    # 4. Audio analysis succeeds ephemerally
+    audio_ok = await consent_test_client.post("/api/v1/analyze/audio", files=audio_files, headers=headers)
+    assert audio_ok.status_code == 201
+    assert audio_ok.json()["status"] == "COMPLETE"
+
+    # 5. History total remains 0
+    hist_res = await consent_test_client.get("/api/v1/analyze/history", headers=headers)
+    assert hist_res.status_code == 200
+    assert hist_res.json()["total"] == 0
+

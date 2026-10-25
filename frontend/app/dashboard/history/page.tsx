@@ -57,12 +57,8 @@ export default function HistoryPage() {
   }, [router])
 
   useEffect(() => {
-    if (!Cookies.get('access_token')) {
-      router.push('/auth/login')
-      return
-    }
     loadData(page, mediaFilter)
-  }, [loadData, page, mediaFilter, router])
+  }, [loadData, page, mediaFilter])
 
   const handleDelete = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
