@@ -102,13 +102,16 @@ Raw Audio Stream (WAV, MP3, OGG, FLAC)
 
 ---
 
-### 2.4 Real-Time Webcam Liveness & Blink Detection
+### 2.4 Real-Time Webcam Liveness & Presentation Attack Defense
 
-- **Architecture**: Client-side MediaPipe Face Mesh running in the browser.
-- **Metric**: Eye Aspect Ratio (EAR):
+- **Face Landmark & Geometric Tracking**: OpenCV `FaceDetectorYN` (YuNet ONNX model, automatically downloaded to `app/ml/weights/face_detection_yunet.onnx`). Tracks 5-point facial landmarks (right eye, left eye, nose tip, right mouth corner, left mouth corner).
+- **Ocular Blink Analysis (EAR)**:
   $$EAR = \frac{||p_2 - p_6|| + ||p_3 - p_5||}{2 \cdot ||p_1 - p_4||}$$
-- **Liveness Logic**: A natural human blink causes EAR to drop below 0.21 and recover within 100–350 ms.
-- **Presentation Attack Mitigation**: Monitored micro-movements, aspect ratio changes, and temporal continuity verify a live human subject rather than a 2D photograph or looped video playback.
+  Natural blinks produce an EAR drop below 0.21 lasting 100–350 ms. Monitored across a non-punitive 30-second rolling window to accommodate natural variance in blink frequency.
+- **Screen Replay & Presentation Attack Defense**:
+  - **2D-FFT Moiré Frequency Grids**: Detects high-frequency periodic interference fringes characteristic of camera sensors capturing LCD/OLED subpixel grids.
+  - **Bezel Boundary Detection**: Hough line transform and rectangular boundary checks identifying physical monitor frames or smartphone edges.
+  - **Specular Glare Analysis**: Dynamic Laplacian variance tracking specular highlights and environmental reflection anomalies across frames.
 
 ---
 

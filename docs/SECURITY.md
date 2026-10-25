@@ -15,11 +15,12 @@ This document outlines the security controls, defensive countermeasures, cryptog
 - **Enforcement**: Plaintext passwords are never logged, stored, or transmitted without TLS.
 
 ### JWT & Session Token Lifecycle
-- **Access Tokens**: Short-lived (15 minutes default) JSON Web Tokens (JWT) signed with `HMAC-SHA256`. Carries subject `sub` (User ID), email, role, and expiration timestamp.
-- **Refresh Tokens**: High-entropy cryptographically secure random bytes (`secrets.token_urlsafe(64)`).
+- **Access Tokens**: Short-lived (60 minutes default) JSON Web Tokens (JWT) signed with `HMAC-SHA256`. Carries subject `sub` (User ID), email, role, and expiration timestamp.
+- **Refresh Tokens**: High-entropy cryptographically secure random bytes (`secrets.token_urlsafe(64)`), stored with `HttpOnly` cookie flags.
+- **Dual-Store Synchronization**: Access tokens are synchronized across cookies and client `localStorage`. The axios request interceptor attaches `Authorization: Bearer <token>`, preventing cross-port cookie access collisions between frontend (`localhost:3000`) and backend (`localhost:8000`).
 - **Storage**: Only the SHA-256 hash of refresh tokens is stored in the `sessions` table. A database leak cannot reveal valid refresh tokens.
 - **Rotation**: Refresh tokens are rotated on each exchange; older tokens are revoked immediately.
-- **Revocation**: Logging out or changing passwords invalidates all active sessions across devices.
+- **Revocation**: Logging out or changing passwords invalidates all active sessions across devices and wipes tokens from both cookies and `localStorage`.
 
 ---
 

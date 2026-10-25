@@ -4,7 +4,7 @@
 > **Server Implementation:** `backend/app/mcp/server.py`  
 > **SDK:** Official MCP v2 Python SDK (`mcp` / `MCPServer`)  
 > **Supported Transports:** `stdio` (local subprocess), `SSE` (HTTP streaming)  
-> **Verification Status:** Verified with automated test suite (`tests/test_mcp_server.py` — 8/8 tests passing)  
+> **Verification Status:** Verified with automated test suite (`tests/test_mcp_server.py` — 10/10 tests passing, `tests/test_stage7_integration_and_security.py` — 6/6 tests passing)  
 
 ---
 

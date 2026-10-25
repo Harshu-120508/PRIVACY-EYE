@@ -69,9 +69,20 @@ If an unexpected crash or container termination occurs mid-inference:
 - **Endpoint**: `DELETE /api/v1/analyze/{analysis_id}`
 - **Action**: Sets `deleted_at = timestamp`. Instantly filters the record out of `/analyze/history`, single-record queries, and dashboard metric calculations.
 
-### Complete Account Deletion
+### Bulk History Purge
+- **Endpoint**: `DELETE /api/v1/analyze/history/purge`
+- **Action**: Atomically soft-deletes all analysis records for the authenticated user and logs a `BULK_HISTORY_PURGED` audit record with the exact `purged_count`.
+
+### Complete Account Deletion (GDPR Article 17 Cascading Erasure)
 - **Endpoint**: `DELETE /api/v1/users/me`
-- **Security Check**: Requires password confirmation (`password_confirmation`).
+- **Security Check**: Requires Argon2id password confirmation (`password_confirmation`).
+- **Physical Disk Erasure**:
+  - Scans `FaceTrainingSample` records for `user_id == user.id` and physically unlinks all biometric face crops from `data/training/real_faces/` via `os.unlink()`.
+  - Scans `Report` records and physically unlinks all generated PDF reports from disk via `os.unlink()`.
+  - Sweeps any orphaned temporary upload chunks.
+- **Audit Log Sanitization & Cryptographic Tombstone**:
+  - Legacy audit records associated with `user.id` have their `user_id` set to `None`, `ip_address` scrubbed to `"0.0.0.0"`, and `user_agent` cleared.
+  - A cryptographic tombstone audit record is written containing a one-way `hashlib.sha256(email.encode()).hexdigest()` with **zero residual plaintext PII**.
 - **Database Cascade**:
   - `users` record deleted.
   - Relational cascade (`cascade="all, delete-orphan"` and foreign key `ondelete="CASCADE"`) wipes:
@@ -81,7 +92,14 @@ If an unexpected crash or container termination occurs mid-inference:
     - All active and expired `sessions`.
     - All `user_preferences`.
     - All `api_keys`.
-  - `audit_logs` are anonymized (`user_id = NULL`).
+
+### Data Portability Export (GDPR Article 20)
+- **Endpoint**: `GET /api/v1/users/me/export`
+- **Action**: Packages the user's complete digital record (profile, preferences, 6 unbundled consents, forensic history, and security events) into a downloadable, structured JSON archive and logs a `USER_DATA_EXPORTED` event.
+
+### Personal Security Audit Trail
+- **Endpoint**: `GET /api/v1/users/me/audit-logs`
+- **Action**: Returns a paginated, action-filtered stream of security events for the authenticated user, displayed live in the Privacy Center.
 
 ### Backup Policy & Retention Limits
 - Database backups taken for disaster recovery are retained in encrypted, access-restricted cold storage for a maximum of 30 days.
