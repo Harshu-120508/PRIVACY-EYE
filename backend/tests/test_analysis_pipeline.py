@@ -291,3 +291,48 @@ def test_audio_analyzer_neural_fusion():
     assert res_ensemble["provenance"]["neural_model"] == "audio_wav2vec2_clone"
     assert any(s["key"] == "neural_voice_clone_discriminator" for s in res_ensemble["signals"])
 
+
+def test_face_recognition_image_integration():
+    """Verify face_recognition integration in ImageAnalyzer for photos."""
+    from app.ml.image_analyzer import ImageAnalyzer, HAS_FACE_RECOGNITION
+
+    analyzer = ImageAnalyzer()
+    analyzer.session = None
+
+    # Test with non-face image (synthetic circle)
+    raw_img = _generate_test_image()
+    res_no_face = analyzer.analyze(raw_img, "test_circle.png")
+    assert res_no_face is not None
+    assert "risk_level" in res_no_face
+    assert "synthetic_probability" in res_no_face
+
+    # Test facial feature analysis method directly
+    blank_rgb = np.zeros((200, 200, 3), dtype=np.uint8)
+    feat_res = analyzer.analyze_facial_features(blank_rgb)
+    if HAS_FACE_RECOGNITION:
+        assert feat_res is not None
+        assert feat_res["faces_detected"] == 0
+
+
+def test_face_recognition_video_integration():
+    """Verify face_recognition integration in VideoAnalyzer for videos."""
+    from app.ml.video_analyzer import VideoAnalyzer, HAS_FACE_RECOGNITION
+
+    analyzer = VideoAnalyzer()
+    analyzer.session = None
+
+    # Test with non-face synthetic video clip
+    raw_vid = _generate_test_video()
+    res_video = analyzer.analyze(raw_vid, "test_clip.mp4")
+    assert res_video is not None
+    assert "risk_level" in res_video
+    assert "synthetic_probability" in res_video
+
+    # Test facial temporal consistency method directly with empty and mock frames
+    frames = [np.full((120, 120, 3), 100, dtype=np.uint8) for _ in range(3)]
+    temp_res = analyzer.analyze_facial_temporal_consistency(frames)
+    if HAS_FACE_RECOGNITION:
+        assert temp_res is not None
+        assert temp_res["faces_tracked_frames"] == 0
+
+
