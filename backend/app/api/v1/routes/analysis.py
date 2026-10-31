@@ -111,10 +111,35 @@ async def _run_and_save_analysis(
     file_bytes: bytes,
     media_type_str: str,
 ):
-    """Run ML pipeline and persist results."""
+    """Run ML pipeline and persist results with real-time stage updates."""
+    from app.services.job_service import job_tracker
     start = datetime.now(timezone.utc)
+    job_id = analysis.id
+
     try:
+        job_tracker.update_stage(
+            job_id,
+            stage="CRYPTOGRAPHIC_HASHING",
+            stage_name="Verifying file integrity and computing SHA-256 provenance hash...",
+        )
+        job_tracker.update_stage(
+            job_id,
+            stage="FEATURE_EXTRACTION",
+            stage_name="Analyzing frequency domain spectra, compression artifacts, and spatial boundaries...",
+        )
+        job_tracker.update_stage(
+            job_id,
+            stage="INFERENCE_EXECUTION",
+            stage_name="Running deep neural network classifiers and biometric consistency checks...",
+        )
+
         result = await ml_service.analyze(file_bytes, media_type_str, analysis.original_filename)
+
+        job_tracker.update_stage(
+            job_id,
+            stage="SIGNAL_FUSION",
+            stage_name="Fusing multi-spectral signals and assembling explainability assessment...",
+        )
 
         analysis.status = AnalysisStatus.COMPLETE
         analysis.risk_level = RiskLevel(result["risk_level"])
@@ -146,12 +171,15 @@ async def _run_and_save_analysis(
                 description=sig.get("description"),
             ))
 
+        job_tracker.complete_job(job_id, result)
+
     except Exception as e:
         logger.error("ML analysis failed", analysis_id=analysis.id, error=str(e))
         analysis.status = AnalysisStatus.FAILED
         analysis.error_code = "ERR_INFERENCE_FAILURE"
         analysis.limitations = "Inference could not be completed due to internal pipeline exception."
         analysis.explanation = f"Analysis failed: {str(e)[:200]}"
+        job_tracker.fail_job(job_id, str(e))
 
     await db.flush()
 
@@ -175,6 +203,8 @@ async def analyze_image(
 
     content = await _validate_upload(file, ALLOWED_IMAGE_TYPES, settings.max_image_bytes)
     analysis = await _create_analysis_record(db, current_user.id, file.filename or "image", MediaType.IMAGE, content, file.content_type or "")
+    from app.services.job_service import job_tracker
+    job_tracker.create_job(job_id=analysis.id, user_id=current_user.id, media_type="image", filename=file.filename or "image")
     await _run_and_save_analysis(db, analysis, content, "image")
 
     # Enforce history consent
@@ -212,6 +242,8 @@ async def analyze_video(
 
     content = await _validate_upload(file, ALLOWED_VIDEO_TYPES, settings.max_video_bytes)
     analysis = await _create_analysis_record(db, current_user.id, file.filename or "video", MediaType.VIDEO, content, file.content_type or "")
+    from app.services.job_service import job_tracker
+    job_tracker.create_job(job_id=analysis.id, user_id=current_user.id, media_type="video", filename=file.filename or "video")
     await _run_and_save_analysis(db, analysis, content, "video")
 
     save_history = await _check_user_consent(db, current_user.id, ConsentPurpose.SAVE_HISTORY, default=True)
@@ -247,6 +279,8 @@ async def analyze_audio(
 
     content = await _validate_upload(file, ALLOWED_AUDIO_TYPES, settings.max_audio_bytes)
     analysis = await _create_analysis_record(db, current_user.id, file.filename or "audio", MediaType.AUDIO, content, file.content_type or "")
+    from app.services.job_service import job_tracker
+    job_tracker.create_job(job_id=analysis.id, user_id=current_user.id, media_type="audio", filename=file.filename or "audio")
     await _run_and_save_analysis(db, analysis, content, "audio")
 
     save_history = await _check_user_consent(db, current_user.id, ConsentPurpose.SAVE_HISTORY, default=True)
@@ -355,6 +389,50 @@ async def get_stats(
         scans_this_month=current_user.scans_used_this_month,
         scans_limit=current_user.scans_limit,
     )
+
+
+@router.get("/jobs/{job_id}/status")
+@router.get("/{analysis_id}/status")
+async def get_analysis_job_status(
+    job_id: Optional[str] = None,
+    analysis_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Exposes real job state (queued, processing, stage name, completed, failed, error)
+    derived from points that actually execute in the pipeline.
+    """
+    target_id = job_id or analysis_id
+    from app.services.job_service import job_tracker
+    job = job_tracker.get_job(target_id)
+    if job:
+        if job.user_id != current_user.id and getattr(current_user, "role", None) != "ADMIN":
+            raise HTTPException(status_code=403, detail="Access denied.")
+        return job.to_dict()
+
+    res = await db.execute(
+        select(MediaAnalysis).where(MediaAnalysis.id == target_id, MediaAnalysis.user_id == current_user.id)
+    )
+    analysis = res.scalar_one_or_none()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis job not found.")
+
+    is_complete = analysis.status == AnalysisStatus.COMPLETE
+    is_failed = analysis.status == AnalysisStatus.FAILED
+
+    return {
+        "job_id": analysis.id,
+        "status": "completed" if is_complete else ("failed" if is_failed else "processing"),
+        "stage": "COMPLETE" if is_complete else ("FAILED" if is_failed else "PROCESSING"),
+        "stage_name": "Forensic & neural analysis complete" if is_complete else ("Analysis failed" if is_failed else "Running classifiers"),
+        "completed": is_complete,
+        "failed": is_failed,
+        "error": analysis.explanation if is_failed else None,
+        "analysis_id": analysis.id,
+        "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
+        "updated_at": analysis.updated_at.isoformat() if analysis.updated_at else None,
+    }
 
 
 @router.get("/{analysis_id}", response_model=AnalysisResponse)

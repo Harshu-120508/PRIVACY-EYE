@@ -93,3 +93,4 @@ def clear_csrf_cookie(response: Response) -> None:
     """Purge CSRF token cookie on logout."""
     is_prod = settings.APP_ENV == "production"
     response.delete_cookie(key="csrf_token", path="/", secure=is_prod, samesite="lax")
+

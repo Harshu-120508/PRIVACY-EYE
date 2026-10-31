@@ -256,6 +256,8 @@ export const analysisApi = {
 
   getAnalysis: (id: string) => api.get(`/analyze/${id}`),
 
+  getJobStatus: (id: string) => api.get(`/analyze/${id}/status`),
+
   deleteAnalysis: (id: string) => api.delete(`/analyze/${id}`),
 
   purgeAllHistory: () => api.delete('/analyze/history/purge'),

@@ -1,5 +1,5 @@
 'use client'
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -74,6 +74,16 @@ export default function AnalyzeMediaPage() {
   const [uploadPercent, setUploadPercent] = useState(0)
   const [processingState, setProcessingState] = useState<'uploading' | 'inferring' | 'complete' | 'failed'>('uploading')
   const [statusMessage, setStatusMessage] = useState('Preparing media for upload...')
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Clean up in-flight requests and timers on component unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [])
 
   const config = MEDIA_CONFIG[activeTab]
 
@@ -95,8 +105,24 @@ export default function AnalyzeMediaPage() {
     disabled: isUploading,
   })
 
+  const cancelAnalysis = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setIsUploading(false)
+    setProcessingState('uploading')
+    setUploadPercent(0)
+    toast.error('Analysis ingestion cancelled')
+  }
+
   const runAnalysis = async () => {
     if (!selectedFile) return
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    abortControllerRef.current = new AbortController()
+
     setIsUploading(true)
     setUploadPercent(0)
     setProcessingState('uploading')
@@ -126,7 +152,10 @@ export default function AnalyzeMediaPage() {
       setStatusMessage('Inference verified. Loading audit report...')
       toast.success('Analysis complete!')
       router.push(`/dashboard/analysis/${res.data.id}`)
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') {
+        return
+      }
       setProcessingState('failed')
       setIsUploading(false)
       toast.error(getErrorMessage(err))
@@ -194,15 +223,23 @@ export default function AnalyzeMediaPage() {
               </p>
             </div>
 
-            {/* Real Progress Bar */}
+            {/* Real Progress Bar & Indeterminate Inference Indicator */}
             <div className="w-full max-w-sm h-1.5 bg-white/10 rounded-full overflow-hidden">
               <div
                 className={`h-full bg-gradient-to-r from-brand-blue to-brand-violet rounded-full transition-all duration-300 ease-out ${
-                  processingState === 'inferring' ? 'animate-pulse' : ''
+                  processingState === 'inferring' ? 'animate-pulse w-full' : ''
                 }`}
-                style={{ width: `${processingState === 'uploading' ? Math.max(uploadPercent, 5) : 100}%` }}
+                style={{ width: processingState === 'uploading' ? `${Math.max(uploadPercent, 5)}%` : '100%' }}
               />
             </div>
+
+            <button
+              type="button"
+              onClick={cancelAnalysis}
+              className="text-xs text-white/40 hover:text-white underline underline-offset-4 transition-colors"
+            >
+              Cancel Ingestion
+            </button>
           </div>
         ) : (
           /* Drag and Drop Zone */
