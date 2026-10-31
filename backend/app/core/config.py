@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./privacyeye.db"
     DATABASE_URL_SYNC: str = "sqlite:///./privacyeye.db"
+    AUTO_CREATE_TABLES: bool = False  # Schema managed via Alembic migrations
 
     # JWT
     JWT_SECRET_KEY: str = "change-me-jwt-secret-32-chars-min"

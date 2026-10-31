@@ -133,6 +133,8 @@ backend/uploads/
 *.db
 *.sqlite
 *.sqlite3
+*.bak
+*.db.bak
 backend/privacyeye.db
 backend/privacy_eye.db
 privacyeye.db

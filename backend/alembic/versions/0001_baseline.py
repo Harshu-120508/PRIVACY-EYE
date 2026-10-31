@@ -74,6 +74,25 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True)),
     )
 
+
+    # ── user_consents ──────────────────────────────────────────────────────
+    op.create_table(
+        "user_consents",
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("user_id", sa.String(36), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True),
+        sa.Column("purpose", sa.Enum("MEDIA_PROCESSING", "SAVE_HISTORY", "RETAIN_MEDIA", "EXTERNAL_AI_SHARING", "MODEL_TRAINING", "ANALYTICS", name="consentpurpose"), nullable=False),
+        sa.Column("granted", sa.Boolean, default=False),
+        sa.Column("policy_version", sa.String(20), default="1.0.0"),
+        sa.Column("granted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("withdrawn_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("ip_address", sa.String(45), nullable=True),
+        sa.Column("user_agent", sa.String(500), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True)),
+        sa.Column("updated_at", sa.DateTime(timezone=True)),
+        sa.UniqueConstraint("user_id", "purpose", name="uq_user_consent_purpose"),
+    )
+    op.create_index("ix_user_consents_user_purpose", "user_consents", ["user_id", "purpose"])
+
     # ── password_reset_tokens ──────────────────────────────────────────────
     op.create_table(
         "password_reset_tokens",
@@ -127,7 +146,7 @@ def upgrade() -> None:
         sa.Column("file_sha256", sa.String(64), nullable=True),
         sa.Column("mime_type", sa.String(100), nullable=True),
         sa.Column("duration_seconds", sa.Float, nullable=True),
-        sa.Column("status", sa.Enum("PENDING", "PROCESSING", "COMPLETE", "FAILED", name="analysisstatus"), default="PENDING"),
+        sa.Column("status", sa.Enum("PENDING", "PROCESSING", "COMPLETE", "FAILED", "UNSUPPORTED", name="analysisstatus"), default="PENDING"),
         sa.Column("processing_started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("processing_finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("processing_ms", sa.Integer, nullable=True),
@@ -135,6 +154,11 @@ def upgrade() -> None:
         sa.Column("synthetic_probability", sa.Float, nullable=True),
         sa.Column("confidence", sa.Float, nullable=True),
         sa.Column("model_version_id", sa.String(36), sa.ForeignKey("model_versions.id"), nullable=True),
+        sa.Column("model_id", sa.String(100), nullable=True),
+        sa.Column("model_version", sa.String(50), nullable=True),
+        sa.Column("prediction", sa.String(50), nullable=True),
+        sa.Column("limitations", sa.Text, nullable=True),
+        sa.Column("error_code", sa.String(50), nullable=True),
         sa.Column("explanation", sa.Text, nullable=True),
         sa.Column("raw_scores", sa.JSON, nullable=True),
         sa.Column("provenance_info", sa.JSON, nullable=True),
@@ -302,6 +326,8 @@ def downgrade() -> None:
     op.drop_table("model_versions")
     op.drop_table("api_keys")
     op.drop_table("password_reset_tokens")
+    op.drop_index("ix_user_consents_user_purpose", table_name="user_consents")
+    op.drop_table("user_consents")
     op.drop_table("user_preferences")
     op.drop_table("sessions")
     op.drop_table("users")

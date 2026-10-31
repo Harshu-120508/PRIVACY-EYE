@@ -22,10 +22,13 @@ logger = structlog.get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan — startup & shutdown."""
     logger.info("Privacy Eye API starting", version=settings.APP_VERSION, env=settings.APP_ENV)
-    # Auto-create tables if they don't exist
-    from app.database.session import Base, engine
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Database schema is managed via Alembic migrations.
+    # Base.metadata.create_all is gated behind explicit dev-only AUTO_CREATE_TABLES flag.
+    if getattr(settings, "AUTO_CREATE_TABLES", False) and settings.APP_ENV == "development":
+        from app.database.session import Base, engine
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables initialized via create_all (dev-only fallback)")
     # Warm up ML models on startup
     from app.services.ml_service import ml_service
     from app.services.file_service import file_service
