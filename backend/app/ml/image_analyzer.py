@@ -22,14 +22,24 @@ except Exception:
     HAS_FACE_RECOGNITION = False
 
 def _find_weights_path() -> Optional[Path]:
-    candidates = [
-        Path(settings.ML_MODELS_DIR) / "image_efficientnet_b4.onnx",
-        Path(settings.MODEL_CACHE_DIR) / "image_efficientnet_b4.onnx",
-    ]
-    for p in candidates:
-        if p.exists() and p.is_file():
-            return p
-    return None
+    try:
+        from app.services.model_manager import model_manager, MODEL_PRESENT, MODEL_READY, MODEL_UNVERIFIED
+        entry = model_manager.get_manifest_entry("image_efficientnet_b4")
+        if not entry or entry.get("status") == "placeholder" or entry.get("source") == "UNREGISTERED/PLACEHOLDER":
+            return None
+        state = model_manager.check_model("image_efficientnet_b4")
+        if state in (MODEL_PRESENT, MODEL_READY, MODEL_UNVERIFIED):
+            return model_manager._find_model_file("image_efficientnet_b4.onnx")
+        return None
+    except Exception:
+        candidates = [
+            Path(settings.ML_MODELS_DIR) / "image_efficientnet_b4.onnx",
+            Path(settings.MODEL_CACHE_DIR) / "image_efficientnet_b4.onnx",
+        ]
+        for p in candidates:
+            if p.exists() and p.is_file():
+                return p
+        return None
 
 
 class ImageAnalyzer:

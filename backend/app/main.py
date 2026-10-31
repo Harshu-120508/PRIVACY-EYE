@@ -29,6 +29,10 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables initialized via create_all (dev-only fallback)")
+    # Model registry integrity & startup provenance check
+    from app.services.model_manager import model_manager
+    model_manager.validate_registry_at_startup()
+
     # Warm up ML models on startup
     from app.services.ml_service import ml_service
     from app.services.file_service import file_service

@@ -23,14 +23,24 @@ except Exception:
 
 
 def _find_video_weights_path() -> Optional[Path]:
-    candidates = [
-        Path(settings.ML_MODELS_DIR) / "video_efficientnet_temporal.onnx",
-        Path(settings.MODEL_CACHE_DIR) / "video_efficientnet_temporal.onnx",
-    ]
-    for p in candidates:
-        if p.exists() and p.is_file():
-            return p
-    return None
+    try:
+        from app.services.model_manager import model_manager, MODEL_PRESENT, MODEL_READY, MODEL_UNVERIFIED
+        entry = model_manager.get_manifest_entry("video_efficientnet_temporal")
+        if not entry or entry.get("status") == "placeholder" or entry.get("source") == "UNREGISTERED/PLACEHOLDER":
+            return None
+        state = model_manager.check_model("video_efficientnet_temporal")
+        if state in (MODEL_PRESENT, MODEL_READY, MODEL_UNVERIFIED):
+            return model_manager._find_model_file("video_efficientnet_temporal.onnx")
+        return None
+    except Exception:
+        candidates = [
+            Path(settings.ML_MODELS_DIR) / "video_efficientnet_temporal.onnx",
+            Path(settings.MODEL_CACHE_DIR) / "video_efficientnet_temporal.onnx",
+        ]
+        for p in candidates:
+            if p.exists() and p.is_file():
+                return p
+        return None
 
 
 class VideoAnalyzer:

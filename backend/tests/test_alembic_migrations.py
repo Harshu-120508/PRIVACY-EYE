@@ -113,3 +113,4 @@ def test_alembic_stamp_and_check(temp_alembic_db: str):
 
     # Verify check passes with zero schema drift
     command.check(cfg)
+

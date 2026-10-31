@@ -15,14 +15,24 @@ logger = structlog.get_logger(__name__)
 
 
 def _find_audio_weights_path() -> Optional[Path]:
-    candidates = [
-        Path(settings.ML_MODELS_DIR) / "audio_wav2vec2_clone.onnx",
-        Path(settings.MODEL_CACHE_DIR) / "audio_wav2vec2_clone.onnx",
-    ]
-    for p in candidates:
-        if p.exists() and p.is_file():
-            return p
-    return None
+    try:
+        from app.services.model_manager import model_manager, MODEL_PRESENT, MODEL_READY, MODEL_UNVERIFIED
+        entry = model_manager.get_manifest_entry("audio_wav2vec2_clone")
+        if not entry or entry.get("status") == "placeholder" or entry.get("source") == "UNREGISTERED/PLACEHOLDER":
+            return None
+        state = model_manager.check_model("audio_wav2vec2_clone")
+        if state in (MODEL_PRESENT, MODEL_READY, MODEL_UNVERIFIED):
+            return model_manager._find_model_file("audio_wav2vec2_clone.onnx")
+        return None
+    except Exception:
+        candidates = [
+            Path(settings.ML_MODELS_DIR) / "audio_wav2vec2_clone.onnx",
+            Path(settings.MODEL_CACHE_DIR) / "audio_wav2vec2_clone.onnx",
+        ]
+        for p in candidates:
+            if p.exists() and p.is_file():
+                return p
+        return None
 
 
 class AudioAnalyzer:
