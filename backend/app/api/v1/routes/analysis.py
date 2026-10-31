@@ -70,13 +70,16 @@ async def _validate_upload(file: UploadFile, allowed_types: set, max_bytes: int)
 
 
 async def _check_user_consent(db: AsyncSession, user_id: str, purpose: ConsentPurpose, default: bool = True) -> bool:
-    """Server-side verification of granular user consent."""
+    """Server-side verification of granular user consent against the append-only ledger."""
     res = await db.execute(
-        select(UserConsent).where(UserConsent.user_id == user_id, UserConsent.purpose == purpose)
+        select(UserConsent)
+        .where(UserConsent.user_id == user_id, UserConsent.purpose == purpose)
+        .order_by(UserConsent.timestamp.desc(), UserConsent.created_at.desc())
+        .limit(1)
     )
     rec = res.scalar_one_or_none()
     if rec is not None:
-        return rec.granted
+        return rec.granted and rec.status == "granted"
     return default
 
 

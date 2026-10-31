@@ -75,8 +75,18 @@ def test_alembic_fresh_upgrade_and_downgrade(temp_alembic_db: str):
     missing_tables = expected_tables - created_tables
     assert not missing_tables, f"Tables missing after upgrade head: {missing_tables}"
 
-    # 2. Downgrade one step
+    # 2. Downgrade one step (from 0002 to 0001)
     command.downgrade(cfg, "-1")
+
+    conn = sqlite3.connect(temp_alembic_db)
+    cursor = conn.cursor()
+    cursor.execute("SELECT version_num FROM alembic_version")
+    rev_after_step = cursor.fetchone()[0]
+    conn.close()
+    assert rev_after_step == "0001_baseline"
+
+    # 3. Downgrade to base (drops all tables)
+    command.downgrade(cfg, "base")
 
     conn = sqlite3.connect(temp_alembic_db)
     cursor = conn.cursor()
@@ -109,7 +119,7 @@ def test_alembic_stamp_and_check(temp_alembic_db: str):
     stamped_version = cursor.fetchone()[0]
     conn.close()
 
-    assert stamped_version == "0001_baseline"
+    assert stamped_version == "0002_user_consent_ledger"
 
     # Verify check passes with zero schema drift
     command.check(cfg)

@@ -279,6 +279,11 @@ export const consentsApi = {
   getConsents: () => api.get('/users/me/consents'),
   updateConsent: (purpose: string, granted: boolean, policy_version: string = '1.0.0') =>
     api.put('/users/me/consents', { purpose, granted, policy_version }),
+  grantConsent: (purpose: string, policy_version: string = '1.0.0', method: string = 'UI') =>
+    api.post('/users/me/consents/grant', { purpose, policy_version, method }),
+  withdrawConsent: (purpose: string, policy_version: string = '1.0.0', method: string = 'UI') =>
+    api.post('/users/me/consents/withdraw', { purpose, policy_version, method }),
+  getConsentHistory: () => api.get('/users/me/consents/history'),
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────────

@@ -356,8 +356,11 @@ class ConsentPurposeEnum(str, Enum):
 
 class ConsentItem(BaseModel):
     purpose: ConsentPurposeEnum
+    status: Optional[str] = "withdrawn"
     granted: bool
     policy_version: str = "1.0.0"
+    timestamp: Optional[datetime] = None
+    method: Optional[str] = "UI"
     granted_at: Optional[datetime] = None
     withdrawn_at: Optional[datetime] = None
 
@@ -373,6 +376,32 @@ class UserConsentUpdateRequest(BaseModel):
     purpose: ConsentPurposeEnum
     granted: bool
     policy_version: str = "1.0.0"
+
+
+class ConsentActionRequest(BaseModel):
+    purpose: ConsentPurposeEnum
+    policy_version: str = "1.0.0"
+    method: str = "UI"
+
+
+class ConsentLedgerItem(BaseModel):
+    id: str
+    purpose: ConsentPurposeEnum
+    status: str
+    granted: bool
+    policy_version: str
+    timestamp: datetime
+    method: str
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class UserConsentHistoryResponse(BaseModel):
+    history: List[ConsentLedgerItem]
+    total: int
 
 
 # ── Audit Trail & Sovereignty Schemas ────────────────────────────────────────

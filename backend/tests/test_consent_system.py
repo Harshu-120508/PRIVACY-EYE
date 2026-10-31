@@ -201,3 +201,115 @@ async def test_video_and_audio_consent_enforcement(consent_test_client: AsyncCli
     assert hist_res.status_code == 200
     assert hist_res.json()["total"] == 0
 
+
+
+@pytest.mark.anyio
+async def test_require_consent_dependency_gate_lifecycle(consent_test_client: AsyncClient):
+    """
+    Phase 5 Requirement (g): Verify require_consent dependency gate:
+    - Blocks with 403 without consent
+    - Passes with 200 after explicit grant
+    - Blocks with 403 after withdrawal
+    """
+    reg = await consent_test_client.post("/api/v1/auth/register", json={
+        "email": "gate_test_user@example.com",
+        "password": "Password123!",
+        "full_name": "Gate Test User",
+    })
+    token = reg.json()["tokens"]["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 1. Verification gate on EXTERNAL_AI_SHARING must block with 403 initially (consent absent)
+    gate_block = await consent_test_client.get("/api/v1/users/me/consents/verify/EXTERNAL_AI_SHARING", headers=headers)
+    assert gate_block.status_code == 403
+    assert "absent or withdrawn" in gate_block.json()["detail"]
+
+    # 2. Explicitly grant EXTERNAL_AI_SHARING via POST /me/consents/grant
+    grant_res = await consent_test_client.post(
+        "/api/v1/users/me/consents/grant",
+        json={"purpose": "EXTERNAL_AI_SHARING", "policy_version": "1.0.0", "method": "UI"},
+        headers=headers,
+    )
+    assert grant_res.status_code == 200
+
+    # 3. Verification gate must now pass with 200 OK
+    gate_pass = await consent_test_client.get("/api/v1/users/me/consents/verify/EXTERNAL_AI_SHARING", headers=headers)
+    assert gate_pass.status_code == 200
+    assert gate_pass.json()["status"] == "granted"
+    assert gate_pass.json()["granted"] is True
+
+    # 4. Explicitly withdraw consent via POST /me/consents/withdraw
+    withdraw_res = await consent_test_client.post(
+        "/api/v1/users/me/consents/withdraw",
+        json={"purpose": "EXTERNAL_AI_SHARING", "policy_version": "1.0.0", "method": "UI"},
+        headers=headers,
+    )
+    assert withdraw_res.status_code == 200
+
+    # 5. Verification gate must block with 403 Forbidden after withdrawal
+    gate_block_after = await consent_test_client.get("/api/v1/users/me/consents/verify/EXTERNAL_AI_SHARING", headers=headers)
+    assert gate_block_after.status_code == 403
+    assert "absent or withdrawn" in gate_block_after.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_append_only_ledger_audit_history_preservation(consent_test_client: AsyncClient):
+    """
+    Phase 5 Requirement (b, g): Demonstrable consent ledger under GDPR Art. 7(1):
+    - Grants and withdrawals create immutable append-only events
+    - Full chronological history is queryable and preserved
+    """
+    reg = await consent_test_client.post("/api/v1/auth/register", json={
+        "email": "ledger_user@example.com",
+        "password": "Password123!",
+        "full_name": "Ledger User",
+    })
+    token = reg.json()["tokens"]["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Action 1: Grant MODEL_TRAINING
+    await consent_test_client.post(
+        "/api/v1/users/me/consents/grant",
+        json={"purpose": "MODEL_TRAINING", "policy_version": "1.0.0", "method": "UI"},
+        headers=headers,
+    )
+
+    # Action 2: Withdraw MODEL_TRAINING
+    await consent_test_client.post(
+        "/api/v1/users/me/consents/withdraw",
+        json={"purpose": "MODEL_TRAINING", "policy_version": "1.0.0", "method": "API"},
+        headers=headers,
+    )
+
+    # Action 3: Grant ANALYTICS
+    await consent_test_client.post(
+        "/api/v1/users/me/consents/grant",
+        json={"purpose": "ANALYTICS", "policy_version": "1.0.0", "method": "UI"},
+        headers=headers,
+    )
+
+    # Query full demonstrable history
+    hist_res = await consent_test_client.get("/api/v1/users/me/consents/history", headers=headers)
+    assert hist_res.status_code == 200
+    hist_data = hist_res.json()
+    assert hist_data["total"] >= 3
+
+    history = hist_data["history"]
+    # The actions are in reverse chronological order (timestamp.desc())
+    assert history[0]["purpose"] == "ANALYTICS"
+    assert history[0]["status"] == "granted"
+    assert history[0]["method"] == "UI"
+
+    assert history[1]["purpose"] == "MODEL_TRAINING"
+    assert history[1]["status"] == "withdrawn"
+    assert history[1]["method"] == "API"
+
+    assert history[2]["purpose"] == "MODEL_TRAINING"
+    assert history[2]["status"] == "granted"
+    assert history[2]["method"] == "UI"
+
+    # Verify each entry has non-null timestamp, id, and policy_version
+    for item in history[:3]:
+        assert item["id"]
+        assert item["timestamp"]
+        assert item["policy_version"] == "1.0.0"

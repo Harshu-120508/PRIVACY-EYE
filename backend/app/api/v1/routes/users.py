@@ -20,6 +20,10 @@ from app.schemas.schemas import (
     DeleteAccountRequest,
     UserConsentListResponse,
     UserConsentUpdateRequest,
+    ConsentActionRequest,
+    ConsentLedgerItem,
+    UserConsentHistoryResponse,
+    ConsentPurposeEnum,
     ConsentItem,
     UserAuditLogResponse,
     UserAuditLogItem,
@@ -284,18 +288,24 @@ async def get_user_consents(
 ):
     """
     Retrieve user's granular consent records across all processing purposes.
-    Initializes default unbundled consent states if not previously configured.
+    Extracts the latest state from the append-only ledger.
     """
     from app.database.models import UserConsent, ConsentPurpose
     from sqlalchemy import select
 
     result = await db.execute(
-        select(UserConsent).where(UserConsent.user_id == current_user.id)
+        select(UserConsent)
+        .where(UserConsent.user_id == current_user.id)
+        .order_by(UserConsent.timestamp.desc(), UserConsent.created_at.desc())
     )
-    existing_consents = {c.purpose: c for c in result.scalars().all()}
+    all_consents = result.scalars().all()
+    latest_by_purpose = {}
+    for c in all_consents:
+        if c.purpose not in latest_by_purpose:
+            latest_by_purpose[c.purpose] = c
 
     defaults = [
-        (ConsentPurpose.MEDIA_PROCESSING, True),  # Necessary for detection
+        (ConsentPurpose.MEDIA_PROCESSING, True),  # Inherent to contracted detection service
         (ConsentPurpose.SAVE_HISTORY, True),       # Default enabled for user audit log
         (ConsentPurpose.RETAIN_MEDIA, False),      # Disabled by default
         (ConsentPurpose.EXTERNAL_AI_SHARING, False),# Disabled by default
@@ -305,22 +315,29 @@ async def get_user_consents(
 
     items = []
     for purpose, default_val in defaults:
-        if purpose in existing_consents:
-            c = existing_consents[purpose]
+        if purpose in latest_by_purpose:
+            c = latest_by_purpose[purpose]
+            is_granted = c.granted and c.status == "granted"
             items.append(ConsentItem(
                 purpose=purpose.value,
-                granted=c.granted,
+                status=c.status,
+                granted=is_granted,
                 policy_version=c.policy_version,
+                timestamp=c.timestamp,
+                method=c.method,
                 granted_at=c.granted_at,
                 withdrawn_at=c.withdrawn_at,
             ))
         else:
             items.append(ConsentItem(
                 purpose=purpose.value,
+                status="granted" if default_val else "withdrawn",
                 granted=default_val,
                 policy_version="1.0.0",
+                timestamp=current_user.created_at,
+                method="DEFAULT",
                 granted_at=current_user.created_at if default_val else None,
-                withdrawn_at=None,
+                withdrawn_at=None if default_val else current_user.created_at,
             ))
 
     return UserConsentListResponse(consents=items, policy_version="1.0.0")
@@ -334,49 +351,33 @@ async def update_user_consent(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Update or withdraw consent for a specific processing purpose.
+    Append-only ledger update: records a new consent state in the ledger.
     Applies immediately to all future processing.
     """
     from app.database.models import UserConsent, ConsentPurpose
-    from sqlalchemy import select
     from datetime import datetime, timezone
 
     now = datetime.now(timezone.utc)
     purpose_enum = ConsentPurpose(body.purpose.value)
-
-    result = await db.execute(
-        select(UserConsent).where(
-            UserConsent.user_id == current_user.id,
-            UserConsent.purpose == purpose_enum,
-        )
-    )
-    consent_record = result.scalar_one_or_none()
+    status_str = "granted" if body.granted else "withdrawn"
 
     ip = request.client.host if request.client else None
     ua = request.headers.get("user-agent", "")[:500]
 
-    if consent_record:
-        consent_record.granted = body.granted
-        consent_record.policy_version = body.policy_version
-        if body.granted:
-            consent_record.granted_at = now
-            consent_record.withdrawn_at = None
-        else:
-            consent_record.withdrawn_at = now
-        consent_record.ip_address = ip
-        consent_record.user_agent = ua
-    else:
-        consent_record = UserConsent(
-            user_id=current_user.id,
-            purpose=purpose_enum,
-            granted=body.granted,
-            policy_version=body.policy_version,
-            granted_at=now if body.granted else None,
-            withdrawn_at=now if not body.granted else None,
-            ip_address=ip,
-            user_agent=ua,
-        )
-        db.add(consent_record)
+    consent_record = UserConsent(
+        user_id=current_user.id,
+        purpose=purpose_enum,
+        status=status_str,
+        granted=body.granted,
+        policy_version=body.policy_version,
+        timestamp=now,
+        method="UI",
+        granted_at=now if body.granted else None,
+        withdrawn_at=now if not body.granted else None,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    db.add(consent_record)
 
     action = "CONSENT_GRANTED" if body.granted else "CONSENT_WITHDRAWN"
     db.add(AuditLog(
@@ -384,10 +385,160 @@ async def update_user_consent(
         action=action,
         resource_type="CONSENT",
         resource_id=consent_record.id,
-        detail={"purpose": body.purpose.value, "granted": body.granted, "policy_version": body.policy_version},
+        detail={"purpose": body.purpose.value, "status": status_str, "granted": body.granted, "policy_version": body.policy_version, "method": "UI"},
         ip_address=ip,
     ))
     await db.commit()
 
-    logger.info("User consent decision recorded", user_id=current_user.id, purpose=body.purpose.value, granted=body.granted)
+    logger.info("User consent decision recorded in append-only ledger", user_id=current_user.id, purpose=body.purpose.value, status=status_str)
     return await get_user_consents(db=db, current_user=current_user)
+
+
+@router.post("/me/consents/grant", response_model=UserConsentListResponse)
+async def grant_user_consent(
+    body: ConsentActionRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Explicitly grant consent for a single purpose and append to immutable ledger (GDPR Art. 7(1)).
+    """
+    from app.database.models import UserConsent, ConsentPurpose
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    purpose_enum = ConsentPurpose(body.purpose.value)
+    ip = request.client.host if request.client else None
+    ua = request.headers.get("user-agent", "")[:500]
+
+    record = UserConsent(
+        user_id=current_user.id,
+        purpose=purpose_enum,
+        status="granted",
+        granted=True,
+        policy_version=body.policy_version,
+        timestamp=now,
+        method=body.method,
+        granted_at=now,
+        withdrawn_at=None,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    db.add(record)
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="CONSENT_GRANTED",
+        resource_type="CONSENT",
+        resource_id=record.id,
+        detail={"purpose": body.purpose.value, "status": "granted", "policy_version": body.policy_version, "method": body.method},
+        ip_address=ip,
+    ))
+    await db.commit()
+    logger.info("Consent explicitly granted", user_id=current_user.id, purpose=body.purpose.value, method=body.method)
+    return await get_user_consents(db=db, current_user=current_user)
+
+
+@router.post("/me/consents/withdraw", response_model=UserConsentListResponse)
+async def withdraw_user_consent(
+    body: ConsentActionRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Withdraw consent for a single purpose as easily as granting (GDPR Art. 7(3)) and append to ledger.
+    """
+    from app.database.models import UserConsent, ConsentPurpose
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    purpose_enum = ConsentPurpose(body.purpose.value)
+    ip = request.client.host if request.client else None
+    ua = request.headers.get("user-agent", "")[:500]
+
+    record = UserConsent(
+        user_id=current_user.id,
+        purpose=purpose_enum,
+        status="withdrawn",
+        granted=False,
+        policy_version=body.policy_version,
+        timestamp=now,
+        method=body.method,
+        granted_at=None,
+        withdrawn_at=now,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    db.add(record)
+    db.add(AuditLog(
+        user_id=current_user.id,
+        action="CONSENT_WITHDRAWN",
+        resource_type="CONSENT",
+        resource_id=record.id,
+        detail={"purpose": body.purpose.value, "status": "withdrawn", "policy_version": body.policy_version, "method": body.method},
+        ip_address=ip,
+    ))
+    await db.commit()
+    logger.info("Consent explicitly withdrawn", user_id=current_user.id, purpose=body.purpose.value, method=body.method)
+    return await get_user_consents(db=db, current_user=current_user)
+
+
+@router.get("/me/consents/history", response_model=UserConsentHistoryResponse)
+async def get_user_consent_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retrieve full demonstrable append-only audit trail of all consent grants and withdrawals (GDPR Art. 7(1)).
+    """
+    from app.database.models import UserConsent
+    from sqlalchemy import select
+
+    stmt = (
+        select(UserConsent)
+        .where(UserConsent.user_id == current_user.id)
+        .order_by(UserConsent.timestamp.desc(), UserConsent.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    records = result.scalars().all()
+
+    items = [
+        ConsentLedgerItem(
+            id=r.id,
+            purpose=r.purpose.value,
+            status=r.status,
+            granted=r.granted,
+            policy_version=r.policy_version,
+            timestamp=r.timestamp,
+            method=r.method,
+            ip_address=r.ip_address,
+            user_agent=r.user_agent,
+            created_at=r.created_at,
+        )
+        for r in records
+    ]
+    return UserConsentHistoryResponse(history=items, total=len(items))
+
+
+@router.get("/me/consents/verify/{purpose}")
+async def verify_consent_gate(
+    purpose: ConsentPurposeEnum,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Verification route demonstrating require_consent dependency enforcement.
+    Blocks with 403 Forbidden if consent is absent or withdrawn.
+    """
+    from app.core.security import require_consent
+    gate = require_consent(purpose.value)
+    consent = await gate(db=db, current_user=current_user)
+    return {
+        "purpose": consent.purpose.value,
+        "status": consent.status,
+        "granted": consent.granted,
+        "timestamp": consent.timestamp.isoformat() if consent.timestamp else None,
+        "policy_version": consent.policy_version,
+        "method": consent.method,
+    }

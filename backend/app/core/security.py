@@ -6,7 +6,7 @@ and dual-mode (Bearer Header + HttpOnly Cookie) user extraction.
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Union, Any
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -239,3 +239,39 @@ async def require_admin(current_user=Depends(get_current_user)):
             detail="Administrative privileges required.",
         )
     return current_user
+
+
+def require_consent(purpose: Union[str, Any]):
+    """
+    FastAPI dependency factory enforcing GDPR Article 7 unbundled consent.
+    Queries the append-only ledger for the latest entry for the specified purpose.
+    Returns 403 Forbidden with a clear explanation if consent is absent or withdrawn.
+    """
+    async def _consent_gate(
+        db: AsyncSession = Depends(get_db),
+        current_user = Depends(get_current_user),
+    ):
+        from app.database.models import UserConsent, ConsentPurpose
+
+        target_purpose = ConsentPurpose(purpose) if isinstance(purpose, str) else purpose
+
+        stmt = (
+            select(UserConsent)
+            .where(
+                UserConsent.user_id == current_user.id,
+                UserConsent.purpose == target_purpose,
+            )
+            .order_by(UserConsent.timestamp.desc(), UserConsent.created_at.desc())
+            .limit(1)
+        )
+        res = await db.execute(stmt)
+        record = res.scalar_one_or_none()
+
+        if record is None or not record.granted or record.status != "granted":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Consent for '{target_purpose.value}' is absent or withdrawn. Processing denied under GDPR Art. 7.",
+            )
+        return record
+
+    return _consent_gate

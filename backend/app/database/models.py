@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 from sqlalchemy import (
     String, Boolean, DateTime, Float, Integer, Text,
-    ForeignKey, Enum as SAEnum, JSON, Index, UniqueConstraint,
+    ForeignKey, Enum as SAEnum, JSON, Index, UniqueConstraint, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
@@ -141,8 +141,11 @@ class UserConsent(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     purpose: Mapped[ConsentPurpose] = mapped_column(SAEnum(ConsentPurpose), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="withdrawn", server_default="withdrawn")
     granted: Mapped[bool] = mapped_column(Boolean, default=False)
     policy_version: Mapped[str] = mapped_column(String(20), default="1.0.0")
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
+    method: Mapped[str] = mapped_column(String(20), default="UI", server_default="UI")
     granted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     withdrawn_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     ip_address: Mapped[Optional[str]] = mapped_column(String(45))
@@ -153,7 +156,7 @@ class UserConsent(Base):
     user: Mapped["User"] = relationship(back_populates="consents")
 
     __table_args__ = (
-        UniqueConstraint("user_id", "purpose", name="uq_user_consent_purpose"),
+        Index("ix_user_consents_user_purpose_timestamp", "user_id", "purpose", "timestamp"),
         Index("ix_user_consents_user_purpose", "user_id", "purpose"),
     )
 

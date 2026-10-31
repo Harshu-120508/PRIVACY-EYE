@@ -34,12 +34,12 @@ const CONSENT_DEFINITIONS = [
   {
     purpose: 'MEDIA_PROCESSING',
     title: 'Media Ingestion & Forensic Detection',
-    badge: 'NECESSARY',
+    badge: 'CONTRACTUAL BASIS',
     badgeStatus: 'safe' as const,
     description:
       'Required to compute spatial frequency (2D-FFT), error level analysis (ELA), and temporal difference metrics on uploaded media buffers. Never used for marketing.',
-    legalBasis: 'Performance of requested contract / service',
-    canToggle: false,
+    legalBasis: 'Performance of requested contract / service (Art. 6(1)(b))',
+    canToggle: true,
   },
   {
     purpose: 'SAVE_HISTORY',
@@ -146,7 +146,11 @@ export default function PrivacyCenterPage() {
     const newVal = !currentVal
     setConsents((prev) => ({ ...prev, [purpose]: newVal }))
     try {
-      await consentsApi.updateConsent(purpose, newVal)
+      if (newVal) {
+        await consentsApi.grantConsent(purpose, '1.0.0', 'UI')
+      } else {
+        await consentsApi.withdrawConsent(purpose, '1.0.0', 'UI')
+      }
       toast.success(newVal ? `Consent granted for ${purpose}` : `Consent withdrawn for ${purpose}`)
       fetchAuditLogs()
     } catch {
@@ -228,7 +232,13 @@ export default function PrivacyCenterPage() {
               <p className="text-xs text-white/50">Server-enforced permissions governing media usage and data retention</p>
             </div>
           </div>
-          <GlassBadge status="safe" label="SERVER-ENFORCED" />
+          <div className="flex items-center gap-2">
+            <Link href="/privacy" className="text-xs font-mono text-brand-blue hover:underline flex items-center gap-1">
+              <span>Policy v1.0.0</span>
+              <ExternalLink className="w-3 h-3" />
+            </Link>
+            <GlassBadge status="safe" label="SERVER-ENFORCED" />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
