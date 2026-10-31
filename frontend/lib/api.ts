@@ -12,16 +12,38 @@ export const api = axios.create({
   withCredentials: true, // Support HttpOnly SameSite authentication cookies
 })
 
-// Attach JWT and CSRF token on every request
+/**
+ * Reads the Double-Submit CSRF token from document cookies.
+ * Supports js-cookie with fallback to document.cookie regex parsing.
+ */
+export function getCsrfToken(): string | undefined {
+  if (typeof document === 'undefined') return undefined
+  const cookieVal = Cookies.get('csrf_token')
+  if (cookieVal) return cookieVal
+
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)
+  return match ? decodeURIComponent(match[1]) : undefined
+}
+
+// Attach JWT and Double-Submit CSRF token on state-changing requests
 api.interceptors.request.use((config) => {
   let token = Cookies.get('access_token')
   if (!token && typeof window !== 'undefined') {
     token = localStorage.getItem('access_token') || undefined
   }
-  if (token) config.headers.Authorization = `Bearer ${token}`
-  // Double-submit CSRF protection: send csrf_token cookie value as header
-  const csrfToken = Cookies.get('csrf_token')
-  if (csrfToken) config.headers['X-CSRF-Token'] = csrfToken
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+
+  // Central Double-Submit CSRF: set X-CSRF-Token on all state-changing requests
+  const method = (config.method || 'get').toUpperCase()
+  const unsafeMethods = ['POST', 'PUT', 'PATCH', 'DELETE']
+  if (unsafeMethods.includes(method)) {
+    const csrfToken = getCsrfToken()
+    if (csrfToken) {
+      config.headers['X-CSRF-Token'] = csrfToken
+    }
+  }
   return config
 })
 

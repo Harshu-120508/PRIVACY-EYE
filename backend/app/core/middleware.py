@@ -70,18 +70,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 class CSRFMiddleware(BaseHTTPMiddleware):
     """
-    Double-submit cookie CSRF protection.
+    OWASP Double-Submit Cookie CSRF protection.
 
-    How it works:
-    1. On every response, we set a `csrf_token` cookie (readable by JS).
-    2. On state-changing requests (POST/PUT/PATCH/DELETE) that use cookie-based auth,
-       the client must send an `X-CSRF-Token` header matching the cookie value.
-    3. Requests using Bearer token auth (API clients, mobile) are EXEMPT from
-       CSRF checks because they are not vulnerable to CSRF attacks.
-    4. Safe methods (GET/HEAD/OPTIONS) are always exempt.
-    5. Health/docs endpoints are always exempt.
-
-    This is the OWASP-recommended "Double Submit Cookie" pattern.
+    Enforces:
+    1. Cryptographic HMAC-signed Double-Submit CSRF tokens bound to server secret and session ID.
+    2. Token cookies set with SameSite=Lax, Secure in production, and readable by JS (HttpOnly=False).
+    3. Mandatory X-CSRF-Token header validation on state-changing requests (POST/PUT/PATCH/DELETE)
+       when cookie-based authentication (access_token/refresh_token) is active.
+    4. Constant-time signature and token comparison (secrets.compare_digest).
+    5. Safe methods (GET/HEAD/OPTIONS) and public pre-auth negotiation paths are exempt.
+    6. Programmatic clients using explicit Authorization: Bearer headers are exempt per OWASP,
+       as browsers never auto-attach custom headers across origins.
+    7. Token rotation on login, register, refresh, and logout.
     """
 
     EXEMPT_PATHS = frozenset([
@@ -99,60 +99,64 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     SAFE_METHODS = frozenset(["GET", "HEAD", "OPTIONS"])
 
     async def dispatch(self, request: Request, call_next):
-        # Always allow safe methods
+        # Always allow safe methods (GET, HEAD, OPTIONS)
         if request.method in self.SAFE_METHODS:
             response = await call_next(request)
-            self._set_csrf_cookie(response)
+            cookie_token = request.cookies.get("csrf_token")
+            if not cookie_token or "." not in cookie_token:
+                from app.core.csrf import set_csrf_cookie
+                set_csrf_cookie(response)
             return response
 
-        # Always allow exempt paths (public endpoints, credentials negotiation)
+        # Always allow exempt public endpoints (e.g. login, register, docs)
         if request.url.path in self.EXEMPT_PATHS:
             response = await call_next(request)
-            self._set_csrf_cookie(response)
+            cookie_token = request.cookies.get("csrf_token")
+            if not cookie_token or "." not in cookie_token:
+                from app.core.csrf import set_csrf_cookie
+                set_csrf_cookie(response)
             return response
 
-        # If the request uses Bearer auth (not cookie-based), CSRF is not needed
+        # If the request uses explicit Bearer auth header (not cookie-based),
+        # CSRF is not applicable per OWASP: browsers never auto-attach Authorization headers across origins
         auth_header = request.headers.get("authorization", "")
         if auth_header.startswith("Bearer "):
             response = await call_next(request)
             return response
 
-        # For cookie-based auth on state-changing methods, validate CSRF token
+        # If no auth cookies are present at all (unauthenticated request), allow through
+        has_auth_cookies = ("access_token" in request.cookies) or ("refresh_token" in request.cookies)
+        if not has_auth_cookies:
+            response = await call_next(request)
+            return response
+
+        # Cookie-based authentication is active on an unsafe state-changing method:
+        # Enforce Double-Submit Cookie CSRF validation.
+        session_id = None
+        access_tok = request.cookies.get("access_token")
+        if access_tok:
+            try:
+                from app.core.security import decode_token
+                payload = decode_token(access_tok)
+                session_id = payload.get("sid")
+            except Exception:
+                pass
+
         cookie_token = request.cookies.get("csrf_token")
         header_token = request.headers.get("x-csrf-token")
 
-        if cookie_token and header_token and secrets.compare_digest(cookie_token, header_token):
-            response = await call_next(request)
-            self._set_csrf_cookie(response)
-            return response
+        from app.core.csrf import validate_csrf_token
+        if not validate_csrf_token(cookie_token, header_token, session_id):
+            logger.warning(
+                "CSRF token validation failed for cookie-authenticated request",
+                path=request.url.path,
+                method=request.method,
+            )
+            return Response(
+                content='{"detail":"CSRF token missing or invalid. Include X-CSRF-Token header."}',
+                status_code=403,
+                media_type="application/json",
+            )
 
-        # If no cookies are present at all (e.g. unauthenticated registration/login),
-        # allow through — CSRF only matters for authenticated cookie sessions
-        if "access_token" not in request.cookies:
-            response = await call_next(request)
-            self._set_csrf_cookie(response)
-            return response
-
-        # CSRF validation failed
-        logger.warning("CSRF token validation failed", path=request.url.path)
-        return Response(
-            content='{"detail":"CSRF token missing or invalid. Include X-CSRF-Token header."}',
-            status_code=403,
-            media_type="application/json",
-        )
-
-    def _set_csrf_cookie(self, response: Response) -> None:
-        """Set a fresh CSRF token cookie on the response (readable by JS)."""
-        from app.core.config import settings
-        is_prod = settings.APP_ENV == "production"
-        token = secrets.token_urlsafe(32)
-        response.set_cookie(
-            key="csrf_token",
-            value=token,
-            httponly=False,  # Must be readable by JavaScript for double-submit
-            samesite="lax",
-            secure=is_prod,
-            max_age=86400,  # 24 hours
-            path="/",
-        )
-
+        response = await call_next(request)
+        return response

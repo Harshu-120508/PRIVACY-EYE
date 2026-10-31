@@ -1,3 +1,4 @@
+from typing import Optional, List, Dict, Any
 """
 Privacy Eye — Application Configuration
 Uses pydantic-settings for typed, validated environment variable loading.
@@ -13,6 +14,7 @@ class Settings(BaseSettings):
     # App
     APP_ENV: str = "development"
     APP_SECRET_KEY: str = "change-me-in-production-must-be-32-chars"
+    CSRF_SECRET_KEY: Optional[str] = None
     APP_VERSION: str = "1.0.0-mvp"
     APP_DEBUG: bool = True
 

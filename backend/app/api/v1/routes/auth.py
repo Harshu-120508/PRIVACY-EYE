@@ -53,8 +53,17 @@ logger = structlog.get_logger(__name__)
 router = APIRouter()
 
 
-def _set_auth_cookies(response: Response, access_token: str, refresh_token: str, remember_me: bool = False):
-    """Set secure authentication cookies on response."""
+def _set_auth_cookies(
+    response: Response,
+    access_token: str,
+    refresh_token: str,
+    remember_me: bool = False,
+    session_id: Optional[str] = None,
+):
+    """Set secure authentication cookies on response and rotate CSRF token."""
+    from app.core.csrf import set_csrf_cookie
+    from app.core.security import decode_token
+
     is_prod = settings.APP_ENV == "production"
     # Access token cookie (60 minutes) - Set httponly=False so frontend JS and headers are fully synchronized
     response.set_cookie(
@@ -88,13 +97,26 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str,
         path="/",
     )
 
+    # Extract session_id if not explicitly provided
+    if not session_id and access_token:
+        try:
+            payload = decode_token(access_token)
+            session_id = payload.get("sid")
+        except Exception:
+            pass
+
+    # Rotate Double-Submit CSRF token on login/session creation
+    set_csrf_cookie(response, session_id=session_id)
+
 
 def _clear_auth_cookies(response: Response):
-    """Purge authentication cookies on response."""
+    """Purge authentication cookies and clear CSRF token on logout."""
+    from app.core.csrf import clear_csrf_cookie
     is_prod = settings.APP_ENV == "production"
     response.delete_cookie(key="access_token", path="/", secure=is_prod, samesite="lax")
     response.delete_cookie(key="refresh_token", path="/", secure=is_prod, samesite="lax")
     response.delete_cookie(key="logged_in", path="/", secure=is_prod, samesite="lax")
+    clear_csrf_cookie(response)
 
 
 # ── Core Authentication ──────────────────────────────────────────────────────
