@@ -12,8 +12,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install essential system libraries for OpenCV, audio DSP, and health probes
+# Install essential system libraries for OpenCV, audio DSP, dlib compilation, and health probes
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    python3-dev \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
