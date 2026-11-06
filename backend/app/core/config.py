@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 30
     RATE_LIMIT_UPLOADS_PER_HOUR: int = 20
 
+    # Feature Flags
+    LIVE_DECISION_V2: bool = False
+
     # ML & Model Storage (Hugging Face Hub)
     ML_MODELS_DIR: str = "app/ml/weights"
     ML_DEVICE: str = "cpu"

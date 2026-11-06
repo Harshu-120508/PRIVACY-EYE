@@ -4,8 +4,21 @@ Enforces biological blink validation, high-sensitivity temporal valley detection
 and gentle notification without artificial confidence reduction.
 """
 import time
+import os
 import numpy as np
 from typing import Dict, Any, List, Optional, Tuple
+
+def is_live_decision_v2() -> bool:
+    env = os.getenv("LIVE_DECISION_V2", "").strip().lower()
+    if env in ("1", "true", "yes", "on"):
+        return True
+    if env in ("0", "false", "no", "off"):
+        return False
+    try:
+        from app.core.config import settings
+        return bool(getattr(settings, "LIVE_DECISION_V2", False))
+    except Exception:
+        return False
 
 MIN_BLINK_DURATION = 0.04   # 40ms minimum duration for camera frame-rate tolerance
 MAX_BLINK_DURATION = 1.00   # 1000ms maximum duration (allows relaxed blinks)
@@ -168,14 +181,25 @@ class BlinkEngine:
 
         # ── 4. 30-Second No-Blink Reminder Protocol ────────────────────────
         # Requirement: If no blink in 30s, DO NOT decrease confidence; just show a popup/banner.
-        seconds_since_last_blink = (
+        time_since_blink = (
             (now - sess["last_blink_timestamp"])
             if sess["last_blink_timestamp"] is not None
+            else None
+        )
+        time_without_blink = (
+            time_since_blink
+            if time_since_blink is not None
             else sess["observation_seconds"]
         )
 
+        if is_live_decision_v2():
+            # Under V2: no blink recorded returns None for seconds_since_last_blink
+            seconds_since_last_blink = time_since_blink
+        else:
+            seconds_since_last_blink = time_without_blink
+
         show_popup = False
-        if seconds_since_last_blink >= OBSERVATION_CHALLENGE_THRESHOLD:
+        if time_without_blink >= OBSERVATION_CHALLENGE_THRESHOLD:
             show_popup = True
             reason_codes.append("BLINK_REMINDER_TRIGGERED")
             user_guidance.append("Please blink naturally to verify active presence.")
@@ -197,7 +221,12 @@ class BlinkEngine:
         return {
             "blink_count": int(sess["blink_count"]),
             "last_blink_timestamp": sess["last_blink_timestamp"],
-            "seconds_since_last_blink": round(float(seconds_since_last_blink), 1),
+            "seconds_since_last_blink": (
+                round(float(seconds_since_last_blink), 1)
+                if seconds_since_last_blink is not None
+                else None
+            ),
+            "has_blinked": bool(sess["blink_count"] > 0),
             "continuous_observation_sec": round(float(sess["observation_seconds"]), 1),
             "is_timer_paused": bool(sess["is_paused"]),
             "timer_pause_reason": sess["pause_reason"],

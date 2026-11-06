@@ -4,9 +4,22 @@ Differentiates between a phone present elsewhere in the scene (Case A: human hol
 versus a phone/screen physically displaying the target face (Case B: presentation attack).
 """
 import math
+import os
 import numpy as np
 import cv2
 from typing import Dict, Any, List, Optional, Tuple
+
+def is_live_decision_v2() -> bool:
+    env = os.getenv("LIVE_DECISION_V2", "").strip().lower()
+    if env in ("1", "true", "yes", "on"):
+        return True
+    if env in ("0", "false", "no", "off"):
+        return False
+    try:
+        from app.core.config import settings
+        return bool(getattr(settings, "LIVE_DECISION_V2", False))
+    except Exception:
+        return False
 
 
 class ScreenDetector:
@@ -16,8 +29,14 @@ class ScreenDetector:
     specular display reflections, perimeter bezel margins, and screen-to-face spatial association.
     """
 
-    def __init__(self, attack_threshold: float = 0.55):
+    def __init__(self, attack_threshold: float = 0.55, live_decision_v2: Optional[bool] = None):
         self.attack_threshold = attack_threshold
+        self.live_decision_v2 = live_decision_v2
+
+    def is_v2_enabled(self) -> bool:
+        if self.live_decision_v2 is not None:
+            return self.live_decision_v2
+        return is_live_decision_v2()
 
     def detect_display_bezels(
         self, img_bgr: np.ndarray
@@ -72,6 +91,11 @@ class ScreenDetector:
                             extent = float(area) / float(rect_area) if rect_area > 0 else 0.0
                             if extent < 0.65:
                                 continue
+
+                            # Handheld/presentation screens do not cover the entire viewport (>55% of frame or touching outer margins)
+                            if self.is_v2_enabled():
+                                if (area / (w * h)) > 0.55 or (bx <= 4 and by <= 4 and bw >= w - 8):
+                                    continue
 
                             device_type = "SMARTPHONE" if (0.38 <= aspect <= 0.85 or 1.25 <= aspect <= 2.65) else "SCREEN_OR_TABLET"
                             screen_conf = min(0.98, round(0.65 + (extent * 0.25) + min(0.10, area / (w * h)), 2))
@@ -268,8 +292,14 @@ class ScreenDetector:
         center_inside_screen = False
 
         for s in screens:
-            iof = self.calculate_iof(face_box, s["box"])
             bx, by, bw, bh = s["box"]
+            if self.is_v2_enabled():
+                s_area = bw * bh
+                f_area = fw * fh
+                # A screen enclosing a face must be strictly larger than the face itself
+                if s_area < f_area * 1.20:
+                    continue
+            iof = self.calculate_iof(face_box, s["box"])
             is_center_in = (bx <= fcx <= bx + bw and by <= fcy <= by + bh)
             if iof > max_iof:
                 max_iof = iof
@@ -326,12 +356,18 @@ class ScreenDetector:
             reason_codes.append("SCREEN_FACE_DETECTED")
             user_message = "A face appears to be displayed through a phone or electronic screen."
         elif has_perimeter_bezel and signals["moire_score"] >= 0.45:
-            # Device bezel directly framing the face combined with screen subpixel Moiré pattern
-            is_attack = True
-            presentation_attack_confidence = min(0.98, round(0.70 + (signals["moire_score"] * 0.25) + (signals["specular_score"] * 0.10), 2))
-            reason_codes.append("PHONE_PRESENTATION_DETECTED")
-            reason_codes.append("SCREEN_FACE_DETECTED")
-            user_message = "A face appears to be displayed through a phone or electronic screen."
+            if not self.is_v2_enabled():
+                # Device bezel directly framing the face combined with screen subpixel Moiré pattern
+                is_attack = True
+                presentation_attack_confidence = min(0.98, round(0.70 + (signals["moire_score"] * 0.25) + (signals["specular_score"] * 0.10), 2))
+                reason_codes.append("PHONE_PRESENTATION_DETECTED")
+                reason_codes.append("SCREEN_FACE_DETECTED")
+                user_message = "A face appears to be displayed through a phone or electronic screen."
+            else:
+                # Under V2: Hough background lines without a detected screen is a weak uncorroborated anomaly, NOT a confirmed attack
+                is_attack = False
+                presentation_attack_confidence = round(signals["moire_score"] * 0.5, 2)
+                reason_codes.append("PERIMETER_BEZEL_CANDIDATE")
         elif signals["moire_score"] >= 0.85 and signals["specular_score"] >= 0.25:
             # Harsh planar glass glare and intense screen frequency grid directly over the face
             is_attack = True
@@ -348,8 +384,8 @@ class ScreenDetector:
                 user_message = "Electronic device detected in scene (Direct human face verified)."
 
         return {
-            "phone_detected": phone_in_scene or has_perimeter_bezel,
-            "screen_face_associated": face_inside_screen or has_perimeter_bezel,
+            "phone_detected": phone_in_scene or (has_perimeter_bezel if not self.is_v2_enabled() else False),
+            "screen_face_associated": face_inside_screen or (has_perimeter_bezel if not self.is_v2_enabled() else False),
             "presentation_attack": is_attack,
             "phone_object_confidence": screen_conf,
             "screen_face_association_confidence": assoc_conf,

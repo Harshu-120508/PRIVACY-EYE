@@ -11,6 +11,7 @@ Full multi-signal pipeline:
 7. Temporal Multi-Frame Evidence Fusion & Calibrated Risk Engine
 """
 import io
+import os
 import time
 import math
 import uuid
@@ -19,6 +20,55 @@ import numpy as np
 import cv2
 from typing import Dict, Any, List, Optional, Tuple
 from PIL import Image
+
+def is_live_decision_v2() -> bool:
+    """Checks whether the LIVE_DECISION_V2 decision logic is active."""
+    env = os.getenv("LIVE_DECISION_V2", "").strip().lower()
+    if env in ("1", "true", "yes", "on"):
+        return True
+    if env in ("0", "false", "no", "off"):
+        return False
+    try:
+        from app.core.config import settings
+        return bool(getattr(settings, "LIVE_DECISION_V2", False))
+    except Exception:
+        return False
+
+def compute_dynamic_reliability(
+    quality_index: float,
+    buffer_len: int,
+    signal_agreement_count: int,
+    is_attack_verdict: bool,
+) -> str:
+    """
+    Computes reliability dynamically based on measured evidence quality,
+    temporal frame history length, and signal corroboration count.
+    Never returns a hardcoded constant.
+    """
+    # Optical quality score (0.0 to 1.0)
+    q_score = min(1.0, max(0.0, float(quality_index) / 80.0))
+    # Temporal evidence score: 1 frame = 0.2, 5+ frames = 1.0
+    t_score = min(1.0, max(0.2, float(buffer_len) / 5.0))
+    # Signal corroboration count: single signal = 0.4, 2+ signals = 1.0
+    c_score = 1.0 if signal_agreement_count >= 2 else 0.4
+
+    # Combined evidence weight
+    evidence_weight = 0.45 * q_score + 0.35 * t_score + 0.20 * c_score
+
+    if is_attack_verdict:
+        if evidence_weight >= 0.75 and signal_agreement_count >= 2:
+            return "HIGH"
+        elif evidence_weight >= 0.45:
+            return "MEDIUM"
+        else:
+            return "LOW"
+    else:
+        if evidence_weight >= 0.70:
+            return "HIGH"
+        elif evidence_weight >= 0.40:
+            return "MEDIUM"
+        else:
+            return "LOW"
 
 from app.ml.benchmarks import (
     FaceForensicsAnalyzer,
@@ -46,8 +96,13 @@ CALIBRATION_TEMPERATURE = 1.25
 
 
 class LiveAuthenticityEngine:
-    def __init__(self, model_path: str = "app/ml/weights/face_detection_yunet.onnx"):
+    def __init__(
+        self,
+        model_path: str = "app/ml/weights/face_detection_yunet.onnx",
+        live_decision_v2: Optional[bool] = None,
+    ):
         self.model_path = model_path
+        self.live_decision_v2 = live_decision_v2
         self._detector: Optional[cv2.FaceDetectorYN] = None
         self._init_detector()
 
@@ -60,7 +115,7 @@ class LiveAuthenticityEngine:
         # Dedicated Eye, Blink, and Screen Detectors
         self._eye_analyzer = EyeAnalyzer()
         self._blink_engine = BlinkEngine()
-        self._screen_detector = ScreenDetector()
+        self._screen_detector = ScreenDetector(live_decision_v2=self.live_decision_v2)
         self._session_smoothed_confidence: Dict[str, float] = {}
         self._session_start_time: Dict[str, float] = {}
 
@@ -76,6 +131,11 @@ class LiveAuthenticityEngine:
         self._session_blink_state: Dict[str, Dict[str, Any]] = {}
         # Guided Interactive Protocol Tasks (Smile, 3 Blinks, Smooth Rotation)
         self._session_guided_tasks: Dict[str, Dict[str, Any]] = {}
+
+    def is_v2_enabled(self) -> bool:
+        if self.live_decision_v2 is not None:
+            return self.live_decision_v2
+        return is_live_decision_v2()
 
     def _init_detector(self):
         try:
@@ -595,7 +655,7 @@ class LiveAuthenticityEngine:
             vals = [s for _, s in self._session_eye_states[session_id]]
             baseline = float(np.percentile(vals, 75))
         else:
-            baseline = max(openness, 15.0)
+            baseline = float(openness) if self.is_v2_enabled() else max(openness, 15.0)
 
         threshold_close = max(3.5, baseline * 0.74)
         threshold_open = max(5.0, baseline * 0.84)
@@ -1425,7 +1485,11 @@ class LiveAuthenticityEngine:
         )
 
         # Unify blink counts between dedicated BlinkEngine and guided protocol
-        effective_blinks = max(int(blink_res["blink_count"]), int(guided_protocol["task_2_blinks"]["blink_count"]))
+        if self.is_v2_enabled():
+            # In V2, blinks must be verified by dedicated BlinkEngine with biological state machine
+            effective_blinks = int(blink_res["blink_count"])
+        else:
+            effective_blinks = max(int(blink_res["blink_count"]), int(guided_protocol["task_2_blinks"]["blink_count"]))
         if session_id in self._session_guided_tasks:
             self._session_guided_tasks[session_id]["blink_count"] = effective_blinks
             if effective_blinks >= 3:
@@ -1446,8 +1510,16 @@ class LiveAuthenticityEngine:
         guided_protocol["all_marked"] = bool(total_marked == 3)
 
         # ── 10e. DYNAMIC LIVENESS & SCREENPLAY DISPROOF METRICS ─────────────
-        sec_since_blink = float(blink_res.get("seconds_since_last_blink", 999.0))
-        is_blinking_regularly = bool(sec_since_blink <= 5.5 or (effective_blinks >= 1 and sec_since_blink <= 8.0))
+        sec_since_blink_val = blink_res.get("seconds_since_last_blink")
+        sec_since_blink = float(sec_since_blink_val) if sec_since_blink_val is not None else 999.0
+
+        if self.is_v2_enabled():
+            # (a) No blink recorded must NOT count as "blinking regularly"; liveness proof requires >= 1 verified blink
+            has_recorded_blink = bool(effective_blinks >= 1 and blink_res.get("last_blink_timestamp") is not None)
+            is_blinking_regularly = bool(has_recorded_blink and sec_since_blink <= 8.0)
+        else:
+            has_recorded_blink = bool(effective_blinks >= 1)
+            is_blinking_regularly = bool(sec_since_blink <= 5.5 or (effective_blinks >= 1 and sec_since_blink <= 8.0))
 
         yaws = [m["pose"]["yaw"] for m in buf] if buf else [pose["yaw"]]
         pitches = [m["pose"]["pitch"] for m in buf] if buf else [pose["pitch"]]
@@ -1471,7 +1543,10 @@ class LiveAuthenticityEngine:
         has_slid = bool(slide_dist >= 12.0 or disp_rate > 0.20 or disp_px > 3.5)
 
         # User's Rule: Freely turning face AND blinking eyes within every 5s disproves screen replay
-        is_liveness_proven = bool(has_turned and is_blinking_regularly)
+        if self.is_v2_enabled():
+            is_liveness_proven = bool(has_turned and has_recorded_blink and is_blinking_regularly)
+        else:
+            is_liveness_proven = bool(has_turned and is_blinking_regularly)
 
         # 10f. Screen / Phone Detection & Screen-Face Association (STEPS 6, 7, 8)
         screen_res = self._screen_detector.analyze(
@@ -1480,10 +1555,16 @@ class LiveAuthenticityEngine:
             temporal_jitter=physiological_jitter,
             is_liveness_proven=is_liveness_proven,
         )
-        if is_liveness_proven:
-            presentation_risk = min(0.12, replay_res["replay_score"])
-        elif screen_res["presentation_attack"]:
-            presentation_risk = max(presentation_risk, screen_res["presentation_attack_confidence"])
+        if self.is_v2_enabled():
+            # (b) Replay evidence stays in the fusion after liveness checks; remove min(0.12, ...) clamp
+            presentation_risk = max(presentation_risk, replay_res["replay_score"])
+            if screen_res["presentation_attack"]:
+                presentation_risk = max(presentation_risk, screen_res["presentation_attack_confidence"])
+        else:
+            if is_liveness_proven:
+                presentation_risk = min(0.12, replay_res["replay_score"])
+            elif screen_res["presentation_attack"]:
+                presentation_risk = max(presentation_risk, screen_res["presentation_attack_confidence"])
 
         # Signal Telemetry
         fused_signals.append({
@@ -1498,9 +1579,14 @@ class LiveAuthenticityEngine:
             "severity": "low" if eye_res["eye_status"] == BOTH_EYES_VISIBLE else ("medium" if eye_res["is_blurry"] else "high"),
             "detail": f"Quality: {eye_res['overall_eye_quality']:.2f}, Left: {eye_res['left_eye_quality']:.2f}, Right: {eye_res['right_eye_quality']:.2f}",
         })
+        blink_time_str = (
+            f"{sec_since_blink:.1f}s ago"
+            if (blink_res.get("last_blink_timestamp") is not None or not self.is_v2_enabled())
+            else "None recorded"
+        )
         fused_signals.append({
             "key": "blink_tracking",
-            "label": f"Blinks Recorded: {effective_blinks} (Last blink: {blink_res['seconds_since_last_blink']}s ago)",
+            "label": f"Blinks Recorded: {effective_blinks} (Last blink: {blink_time_str})",
             "severity": "low" if (not blink_res["is_timer_paused"] or effective_blinks > 0) else "medium",
             "detail": f"Continuous observation: {blink_res['continuous_observation_sec']}s (Timer paused: {blink_res['is_timer_paused']})",
         })
@@ -1551,131 +1637,294 @@ class LiveAuthenticityEngine:
         reason_codes.extend(screen_res.get("reason_codes", []))
 
         vitality_flux = (d_yaw * 5.0) + (d_pitch * 5.0) + (d_roll * 5.0) + (disp_rate * 3.0)
-        time_flux = math.sin(time.time() * 2.8) * 0.5
+        time_flux = 0.0 if self.is_v2_enabled() else (math.sin(time.time() * 2.8) * 0.5)
         user_message = None
 
-        # ── CASE 2: PRIMARY RULE — PHONE / SCREEN PRESENTATION ATTACK ───────
-        if (screen_res["presentation_attack"] or presentation_risk >= 0.55) and not is_liveness_proven:
-            # Hard 0 live-human confidence, 100% presentation risk
-            confidence = 0.0
-            liveness_score = 0.0
-            spatial_risk = max(spatial_risk, 0.85)
-            presentation_risk = 1.0
-            assessment = "POSSIBLE_REPLAY"
-            category_label = "Possible screen/replay presentation attack"
-            explanation = (
-                "Possible screen/replay presentation attack. The detected face appears to be presented "
-                "through a smartphone or electronic display rather than direct human observation."
-            )
-            user_message = "A face appears to be displayed through a phone or electronic screen."
-            reliability = "HIGH"
+        if self.is_v2_enabled():
+            # ── V2 DECISION LOGIC: EVIDENCE FUSION & CALIBRATED STATE MACHINE ──
+            quality_idx = float(quality.get("quality_index", 50.0))
+            laplacian_val = float(quality.get("laplacian_var", 50.0))
+            is_low_quality = bool(quality_idx < 35.0 or (laplacian_val < 15.0 and eye_res.get("is_blurry", False)))
 
-        # ── USER'S RULE: ACTIVE LIVENESS & PROGRESSIVE CONFIDENCE SCALING ───────
-        # "if the person is can freely turn around his face and blinking eyes in every 5 seconds atleast 
-        # its not a screen play or presntation and after this the confidence bar should go to 60 
-        # after that check livness of the person like is he sliding his face and moving around , blinking 
-        # and if any of this passes then scale confidence bar to 85 -95 range"
-        elif is_liveness_proven:
-            # Secondary dynamic liveness: sliding face, moving around, or multiple genuine blinks
-            has_continuous_liveness = bool(
-                has_slid
-                or effective_blinks >= 2
-                or guided_protocol["task_2_blinks"]["marked"]
-                or guided_protocol["task_3_rotation"]["marked"]
-                or yaw_span >= 14.0
-                or disp_rate > 0.22
+            has_screen_attack = bool(screen_res.get("presentation_attack", False))
+            has_phone = bool(screen_res.get("phone_detected", False))
+            has_screen_face_assoc = bool(screen_res.get("screen_face_associated", False))
+            has_bezel = bool(screen_res.get("has_bezel_lines", False))
+
+            is_corroborated_screen_attack = bool(
+                has_screen_attack and has_screen_face_assoc
             )
 
-            if has_continuous_liveness:
-                # Scale confidence bar directly to the 85% - 95% range
-                calc_conf = 87.0 + min(7.5, (vitality_flux * 1.5) + (min(effective_blinks, 5) * 0.4)) + time_flux
-                confidence = round(float(max(85.0, min(95.0, calc_conf))), 1)
+            # Case V2-1: Insufficient Clarity / Evidence -> UNABLE_TO_DETERMINE
+            if is_low_quality:
+                assessment = "UNABLE_TO_DETERMINE"
+                category_label = "Unable to determine authenticity"
+                explanation = (
+                    "Image clarity or lighting is insufficient to reliably assess facial authenticity. "
+                    "Please improve lighting and face the camera directly."
+                )
+                user_message = "Unable to verify authenticity due to low image clarity or lighting. Please improve lighting and hold still."
+                confidence = round(max(10.0, min(45.0, quality_idx * 0.6)), 1)
+                reliability = compute_dynamic_reliability(quality_idx, len(buf), signal_agreement_count=1, is_attack_verdict=False)
+
+            # Case V2-2: Corroborated Presentation Attack (Screen Replay) -> POSSIBLE_REPLAY
+            elif is_corroborated_screen_attack and not is_liveness_proven:
+                confidence = 0.0
+                liveness_score = 0.0
+                spatial_risk = max(spatial_risk, 0.85)
+                presentation_risk = 1.0
+                assessment = "POSSIBLE_REPLAY"
+                category_label = "Possible screen/replay presentation attack"
+                explanation = (
+                    "Possible screen/replay presentation attack. Corroborated evidence indicates the detected face "
+                    "is presented through a smartphone or electronic display rather than direct human observation."
+                )
+                user_message = "A face appears to be displayed through a phone or electronic screen."
+                sig_count = 2 if (has_screen_attack and presentation_risk >= 0.65) else 2
+                reliability = compute_dynamic_reliability(quality_idx, len(buf), sig_count, is_attack_verdict=True)
+
+            # Case V2-3: Corroborated Face Swap / Digital Manipulation -> POSSIBLE_FACE_SWAP
+            elif spatial_risk >= 0.65 and not is_liveness_proven:
+                confidence = round(max(0.0, min(30.0, (1.0 - spatial_risk) * 100.0)), 1)
+                assessment = "POSSIBLE_FACE_SWAP"
+                category_label = "Possible face-swap manipulation detected"
+                explanation = (
+                    "Possible face-swap or synthetic face manipulation detected. Inconsistencies observed "
+                    "along facial boundary contours and frequency spectrum."
+                )
+                user_message = "Visual inconsistencies detected along facial boundaries indicating possible manipulation."
+                sig_count = 2 if (swap_res.get("seam_score", 0.0) > 0.45 or not ffhq_res.get("is_organic", True)) else 1
+                reliability = compute_dynamic_reliability(quality_idx, len(buf), sig_count, is_attack_verdict=True)
+
+            # Case V2-4: Uncorroborated / Moderate Risk -> SUSPICIOUS
+            elif (presentation_risk >= 0.50 or spatial_risk >= 0.45 or has_screen_attack) and not is_liveness_proven:
+                max_risk = max(presentation_risk, spatial_risk)
+                calc_conf = max(20.0, min(50.0, (1.0 - max_risk) * 100.0))
+                confidence = round(float(calc_conf), 1)
+                assessment = "SUSPICIOUS"
+                category_label = "Suspicious visual patterns detected"
+                explanation = (
+                    "Uncorroborated visual anomalies detected (possible screen reflections, edge artifacts, "
+                    "or ambiguous boundary patterns). Additional verification or liveness movement required."
+                )
+                user_message = "Suspicious visual patterns detected. Please face the camera naturally away from reflections."
+                reliability = compute_dynamic_reliability(quality_idx, len(buf), signal_agreement_count=1, is_attack_verdict=False)
+
+            # Case V2-5: Active Liveness Proven
+            elif is_liveness_proven:
+                has_continuous_liveness = bool(
+                    has_slid
+                    or effective_blinks >= 2
+                    or guided_protocol["task_2_blinks"]["marked"]
+                    or guided_protocol["task_3_rotation"]["marked"]
+                    or yaw_span >= 14.0
+                    or disp_rate > 0.22
+                )
+                if has_continuous_liveness:
+                    calc_conf = 87.0 + min(7.5, (vitality_flux * 1.5) + (min(effective_blinks, 5) * 0.4))
+                    confidence = round(float(max(85.0, min(95.0, calc_conf))), 1)
+                    category_label = "Real human face"
+                    assessment = "REAL_HUMAN_FACE"
+                    explanation = (
+                        "Active dynamic liveness verified: smooth facial sliding, natural head movement, "
+                        "and genuine eye blinks confirmed."
+                    )
+                    user_message = "All liveness criteria verified successfully."
+                    reliability = compute_dynamic_reliability(quality_idx, len(buf), signal_agreement_count=2, is_attack_verdict=False)
+                else:
+                    calc_conf = 60.0 + min(4.5, vitality_flux * 1.0)
+                    confidence = round(float(max(60.0, min(65.0, calc_conf))), 1)
+                    category_label = "Human face detected"
+                    assessment = "HUMAN_FACE_DETECTED"
+                    explanation = (
+                        "Natural facial turning and regular eye blinks verified (Non-attack confirmed). "
+                        "Slide your face or blink again to reach >85% confidence."
+                    )
+                    user_message = "Active presence verified. Move or slide face to complete verification."
+                    reliability = compute_dynamic_reliability(quality_idx, len(buf), signal_agreement_count=1, is_attack_verdict=False)
+
+            # Case V2-6: Eyes Blurry or Not Visible
+            elif eye_res["is_blurry"] or eye_res["eye_status"] in (EYE_TOO_BLURRY, BOTH_EYES_NOT_VISIBLE, EYES_OBSCURED):
+                base_score = 62.0 + min(12.0, vitality_flux * 1.5) + (10.0 if ffhq_res["is_organic"] else 0.0)
+                confidence = round(float(max(55.0, min(78.5, base_score))), 1)
+                category_label = "Human face detected (Eyes not clearly visible)"
+                assessment = "HUMAN_FACE_DETECTED"
+                explanation = (
+                    "Natural human facial structure and movements detected. "
+                    "Note: Eye-based liveness evidence is unavailable due to motion blur or occlusion."
+                )
+                user_message = "Eyes are not clearly visible. Continuing analysis with spatial and temporal signals."
+                reliability = compute_dynamic_reliability(quality_idx, len(buf), signal_agreement_count=1, is_attack_verdict=False)
+
+            # Case V2-7: Standard Guided Tasks Evaluation
+            elif total_marked == 3:
+                calc_conf = 88.0 + min(9.0, vitality_flux * 1.5)
+                confidence = round(float(max(86.0, min(98.8, calc_conf))), 1)
                 category_label = "Real human face"
                 assessment = "REAL_HUMAN_FACE"
                 explanation = (
-                    "Active dynamic liveness verified: smooth facial sliding, natural head movement, "
-                    "and genuine eye blinks confirmed."
+                    "All 3 live instructions verified: Authentic smile with teeth/wide lips, 3 genuine eye blinks, "
+                    "and smooth head rotation without blurring or warping."
                 )
                 user_message = "All liveness criteria verified successfully."
-                reliability = "HIGH" if quality["quality_index"] >= 50 else "MEDIUM"
-            else:
-                # Baseline confidence goes to 60%
-                calc_conf = 60.0 + min(4.5, vitality_flux * 1.0) + time_flux
-                confidence = round(float(max(60.0, min(65.0, calc_conf))), 1)
+                reliability = compute_dynamic_reliability(quality_idx, len(buf), signal_agreement_count=3, is_attack_verdict=False)
+
+            elif total_marked == 2:
+                calc_conf = 77.0 + min(6.5, vitality_flux * 1.2)
+                confidence = round(float(max(76.0, min(84.8, calc_conf))), 1)
+                category_label = "Likely as human face"
+                assessment = "LIKELY_HUMAN_FACE"
+                explanation = (
+                    "2 of 3 live instructions completed. Strong live human facial structure confirmed. "
+                    "Complete the remaining instruction to reach >85% confidence."
+                )
+                user_message = "2 of 3 live testing instructions completed."
+                reliability = compute_dynamic_reliability(quality_idx, len(buf), signal_agreement_count=2, is_attack_verdict=False)
+
+            elif total_marked == 1:
+                calc_conf = 63.5 + min(8.5, vitality_flux * 1.2)
+                confidence = round(float(max(61.0, min(74.5, calc_conf))), 1)
                 category_label = "Human face detected"
                 assessment = "HUMAN_FACE_DETECTED"
                 explanation = (
-                    "Natural facial turning and regular eye blinks verified (Non-attack confirmed). "
-                    "Slide your face or blink again to reach >85% confidence."
+                    "1 live instruction completed. Human face detected. "
+                    "Follow the remaining instructions (smile, blink 3 times, rotate face) to verify liveness."
                 )
-                user_message = "Active presence verified. Move or slide face to complete verification."
-                reliability = "MEDIUM" if quality["quality_index"] >= 50 else "LOW"
+                user_message = "Follow instructions to verify active presence."
+                reliability = compute_dynamic_reliability(quality_idx, len(buf), signal_agreement_count=1, is_attack_verdict=False)
 
-        # ── CASE 3: EYES BLURRY OR NOT VISIBLE ──────────────────────────────
-        elif eye_res["is_blurry"] or eye_res["eye_status"] in (EYE_TOO_BLURRY, BOTH_EYES_NOT_VISIBLE, EYES_OBSCURED):
-            # Eye signal unavailable; derive confidence strictly from other criteria (spatial, temporal, quality, benchmarks)
-            base_score = 62.0 + min(12.0, vitality_flux * 1.5) + (10.0 if ffhq_res["is_organic"] else 0.0)
-            confidence = round(float(max(55.0, min(78.5, base_score))), 1)
-            category_label = "Human face detected (Eyes not clearly visible)"
-            assessment = "HUMAN_FACE_DETECTED"
-            explanation = (
-                "Natural human facial structure and movements detected. "
-                "Note: Eye-based liveness evidence is unavailable due to motion blur or occlusion."
-            )
-            user_message = "Eyes are not clearly visible. Continuing analysis with spatial and temporal signals."
-            reliability = "MEDIUM" if quality["quality_index"] >= 50 else "LOW"
-
-        # ── CASE 1: LIKELY LIVE HUMAN (STANDARD CALIBRATION) ────────────────
-        elif total_marked == 3:
-            calc_conf = 88.0 + min(9.0, vitality_flux * 1.5) + time_flux
-            confidence = round(float(max(86.0, min(98.8, calc_conf))), 1)
-            category_label = "Real human face"
-            assessment = "REAL_HUMAN_FACE"
-            explanation = (
-                "All 3 live instructions verified: Authentic smile with teeth/wide lips, 3 genuine eye blinks, "
-                "and smooth head rotation without blurring or warping."
-            )
-            user_message = "All liveness criteria verified successfully."
-            reliability = "HIGH" if quality["quality_index"] >= 65 else "MEDIUM"
-
-        elif total_marked == 2:
-            calc_conf = 77.0 + min(6.5, vitality_flux * 1.2) + time_flux
-            confidence = round(float(max(76.0, min(84.8, calc_conf))), 1)
-            category_label = "Likely as human face"
-            assessment = "LIKELY_HUMAN_FACE"
-            explanation = (
-                "2 of 3 live instructions completed. Strong live human facial structure confirmed. "
-                "Complete the remaining instruction to reach >85% confidence."
-            )
-            user_message = "2 of 3 live testing instructions completed."
-            reliability = "HIGH" if quality["quality_index"] >= 60 else "MEDIUM"
-
-        elif total_marked == 1:
-            calc_conf = 63.5 + min(8.5, vitality_flux * 1.2) + time_flux
-            confidence = round(float(max(61.0, min(74.5, calc_conf))), 1)
-            category_label = "Human face detected"
-            assessment = "HUMAN_FACE_DETECTED"
-            explanation = (
-                "1 live instruction completed. Human face detected. "
-                "Follow the remaining instructions (smile, blink 3 times, rotate face) to verify liveness."
-            )
-            user_message = "Follow instructions to verify active presence."
-            reliability = "MEDIUM"
+            else:
+                calc_conf = 52.0 + min(6.0, physiological_jitter * 1.2)
+                confidence = round(float(max(50.5, min(59.5, calc_conf))), 1)
+                category_label = "You are Human but currently you are not following instruction above"
+                assessment = "INSTRUCTION_NOT_FOLLOWED"
+                explanation = (
+                    "Natural human facial structure and eyes detected, but none of the 3 live testing instructions "
+                    "have been performed. Please smile, blink 3 times, and rotate your face smoothly."
+                )
+                user_message = "Please follow the 3 instructions above to complete verification."
+                reliability = compute_dynamic_reliability(quality_idx, len(buf), signal_agreement_count=1, is_attack_verdict=False)
 
         else:
-            calc_conf = 52.0 + min(6.0, physiological_jitter * 1.2) + time_flux
-            confidence = round(float(max(50.5, min(59.5, calc_conf))), 1)
-            category_label = "You are Human but currently you are not following instruction above"
-            assessment = "INSTRUCTION_NOT_FOLLOWED"
-            explanation = (
-                "Natural human facial structure and eyes detected, but none of the 3 live testing instructions "
-                "have been performed. Please smile, blink 3 times, and rotate your face smoothly."
-            )
-            user_message = "Please follow the 3 instructions above to complete verification."
-            reliability = "MEDIUM" if quality["quality_index"] >= 50 else "LOW"
+            # ── LEGACY PATH (LIVE_DECISION_V2=False) - 100% UNTOUCHED ──
+            # ── CASE 2: PRIMARY RULE — PHONE / SCREEN PRESENTATION ATTACK ───────
+            if (screen_res["presentation_attack"] or presentation_risk >= 0.55) and not is_liveness_proven:
+                # Hard 0 live-human confidence, 100% presentation risk
+                confidence = 0.0
+                liveness_score = 0.0
+                spatial_risk = max(spatial_risk, 0.85)
+                presentation_risk = 1.0
+                assessment = "POSSIBLE_REPLAY"
+                category_label = "Possible screen/replay presentation attack"
+                explanation = (
+                    "Possible screen/replay presentation attack. The detected face appears to be presented "
+                    "through a smartphone or electronic display rather than direct human observation."
+                )
+                user_message = "A face appears to be displayed through a phone or electronic screen."
+                reliability = "HIGH"
+
+            # ── USER'S RULE: ACTIVE LIVENESS & PROGRESSIVE CONFIDENCE SCALING ───────
+            elif is_liveness_proven:
+                # Secondary dynamic liveness: sliding face, moving around, or multiple genuine blinks
+                has_continuous_liveness = bool(
+                    has_slid
+                    or effective_blinks >= 2
+                    or guided_protocol["task_2_blinks"]["marked"]
+                    or guided_protocol["task_3_rotation"]["marked"]
+                    or yaw_span >= 14.0
+                    or disp_rate > 0.22
+                )
+
+                if has_continuous_liveness:
+                    # Scale confidence bar directly to the 85% - 95% range
+                    calc_conf = 87.0 + min(7.5, (vitality_flux * 1.5) + (min(effective_blinks, 5) * 0.4)) + time_flux
+                    confidence = round(float(max(85.0, min(95.0, calc_conf))), 1)
+                    category_label = "Real human face"
+                    assessment = "REAL_HUMAN_FACE"
+                    explanation = (
+                        "Active dynamic liveness verified: smooth facial sliding, natural head movement, "
+                        "and genuine eye blinks confirmed."
+                    )
+                    user_message = "All liveness criteria verified successfully."
+                    reliability = "HIGH" if quality["quality_index"] >= 50 else "MEDIUM"
+                else:
+                    # Baseline confidence goes to 60%
+                    calc_conf = 60.0 + min(4.5, vitality_flux * 1.0) + time_flux
+                    confidence = round(float(max(60.0, min(65.0, calc_conf))), 1)
+                    category_label = "Human face detected"
+                    assessment = "HUMAN_FACE_DETECTED"
+                    explanation = (
+                        "Natural facial turning and regular eye blinks verified (Non-attack confirmed). "
+                        "Slide your face or blink again to reach >85% confidence."
+                    )
+                    user_message = "Active presence verified. Move or slide face to complete verification."
+                    reliability = "MEDIUM" if quality["quality_index"] >= 50 else "LOW"
+
+            # ── CASE 3: EYES BLURRY OR NOT VISIBLE ──────────────────────────────
+            elif eye_res["is_blurry"] or eye_res["eye_status"] in (EYE_TOO_BLURRY, BOTH_EYES_NOT_VISIBLE, EYES_OBSCURED):
+                # Eye signal unavailable; derive confidence strictly from other criteria (spatial, temporal, quality, benchmarks)
+                base_score = 62.0 + min(12.0, vitality_flux * 1.5) + (10.0 if ffhq_res["is_organic"] else 0.0)
+                confidence = round(float(max(55.0, min(78.5, base_score))), 1)
+                category_label = "Human face detected (Eyes not clearly visible)"
+                assessment = "HUMAN_FACE_DETECTED"
+                explanation = (
+                    "Natural human facial structure and movements detected. "
+                    "Note: Eye-based liveness evidence is unavailable due to motion blur or occlusion."
+                )
+                user_message = "Eyes are not clearly visible. Continuing analysis with spatial and temporal signals."
+                reliability = "MEDIUM" if quality["quality_index"] >= 50 else "LOW"
+
+            # ── CASE 1: LIKELY LIVE HUMAN (STANDARD CALIBRATION) ────────────────
+            elif total_marked == 3:
+                calc_conf = 88.0 + min(9.0, vitality_flux * 1.5) + time_flux
+                confidence = round(float(max(86.0, min(98.8, calc_conf))), 1)
+                category_label = "Real human face"
+                assessment = "REAL_HUMAN_FACE"
+                explanation = (
+                    "All 3 live instructions verified: Authentic smile with teeth/wide lips, 3 genuine eye blinks, "
+                    "and smooth head rotation without blurring or warping."
+                )
+                user_message = "All liveness criteria verified successfully."
+                reliability = "HIGH" if quality["quality_index"] >= 65 else "MEDIUM"
+
+            elif total_marked == 2:
+                calc_conf = 77.0 + min(6.5, vitality_flux * 1.2) + time_flux
+                confidence = round(float(max(76.0, min(84.8, calc_conf))), 1)
+                category_label = "Likely as human face"
+                assessment = "LIKELY_HUMAN_FACE"
+                explanation = (
+                    "2 of 3 live instructions completed. Strong live human facial structure confirmed. "
+                    "Complete the remaining instruction to reach >85% confidence."
+                )
+                user_message = "2 of 3 live testing instructions completed."
+                reliability = "HIGH" if quality["quality_index"] >= 60 else "MEDIUM"
+
+            elif total_marked == 1:
+                calc_conf = 63.5 + min(8.5, vitality_flux * 1.2) + time_flux
+                confidence = round(float(max(61.0, min(74.5, calc_conf))), 1)
+                category_label = "Human face detected"
+                assessment = "HUMAN_FACE_DETECTED"
+                explanation = (
+                    "1 live instruction completed. Human face detected. "
+                    "Follow the remaining instructions (smile, blink 3 times, rotate face) to verify liveness."
+                )
+                user_message = "Follow instructions to verify active presence."
+                reliability = "MEDIUM"
+
+            else:
+                calc_conf = 52.0 + min(6.0, physiological_jitter * 1.2) + time_flux
+                confidence = round(float(max(50.5, min(59.5, calc_conf))), 1)
+                category_label = "You are Human but currently you are not following instruction above"
+                assessment = "INSTRUCTION_NOT_FOLLOWED"
+                explanation = (
+                    "Natural human facial structure and eyes detected, but none of the 3 live testing instructions "
+                    "have been performed. Please smile, blink 3 times, and rotate your face smoothly."
+                )
+                user_message = "Please follow the 3 instructions above to complete verification."
+                reliability = "MEDIUM" if quality["quality_index"] >= 50 else "LOW"
 
         # Apply Temporal Confidence Smoothing (EMA, alpha=0.35)
-        if assessment != "POSSIBLE_REPLAY":
+        if assessment not in ("POSSIBLE_REPLAY", "POSSIBLE_FACE_SWAP"):
             prev_conf = self._session_smoothed_confidence.get(session_id, confidence)
             if prev_conf == 0.0 and confidence >= 60.0:
                 smoothed_conf = confidence
@@ -1748,6 +1997,7 @@ class LiveAuthenticityEngine:
             "landmarks": landmarks,
             "head_pose": pose,
             "liveness_score": liveness_score,
+            "is_liveness_proven": bool(is_liveness_proven),
             "spatial_risk": round(spatial_risk, 3),
             "presentation_risk": round(presentation_risk, 3),
             "explanation": explanation,
