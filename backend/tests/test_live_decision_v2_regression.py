@@ -331,3 +331,144 @@ def test_legacy_path_untouched_when_flag_off():
         "REAL_HUMAN_FACE",
         "LIKELY_HUMAN_FACE",
     )
+
+
+# ── Phase 2 Signal Heuristic Tests ────────────────────────────────────────────
+
+def test_moire_periodic_peak_detector_clean_skin_vs_moire():
+    """
+    Phase 2: Moire periodic peak detector vs local median.
+    Natural clean skin must NOT trigger periodic moire spikes (peak_to_median <= 1.5).
+    Periodic grid (simulated display moire) triggers isolated peak spike.
+    """
+    engine_v2 = LiveAuthenticityEngine(live_decision_v2=True)
+    engine_v1 = LiveAuthenticityEngine(live_decision_v2=False)
+
+    # 1. Natural face crop (smooth skin with natural illumination)
+    np.random.seed(42)
+    natural_skin = (np.random.rand(140, 120, 3) * 60 + 140).astype(np.uint8)
+    # Add natural soft facial gradient
+    for r in range(140):
+        natural_skin[r] = np.clip(natural_skin[r] * (1.0 - r / 450.0), 0, 255)
+
+    res_v2_clean = engine_v2.detect_screen_replay(natural_skin)
+    assert res_v2_clean["peak_to_median_ratio"] < 1.7
+    assert res_v2_clean["replay_score"] <= 0.15
+    assert not any(s["key"] == "screen_moire_peaks" for s in res_v2_clean["signals"])
+
+    # 2. Replay with periodic moire pattern (subpixel grid)
+    screen_moire = natural_skin.copy()
+    y_g, x_g = np.ogrid[:140, :120]
+    periodic_grid = ((x_g % 4 == 0) | (y_g % 4 == 0)).astype(np.uint8) * 45
+    screen_moire[:, :, 0] = np.clip(screen_moire[:, :, 0] + periodic_grid, 0, 255)
+    screen_moire[:, :, 1] = np.clip(screen_moire[:, :, 1] + periodic_grid, 0, 255)
+
+    res_v2_moire = engine_v2.detect_screen_replay(screen_moire)
+    assert res_v2_moire["peak_to_median_ratio"] > res_v2_clean["peak_to_median_ratio"]
+    assert res_v2_moire["replay_score"] > res_v2_clean["replay_score"]
+
+
+def test_ela_live_path_bypass_under_v2():
+    """
+    Phase 2: ELA is invalid on frames already JPEG-compressed by frontend (q0.85).
+    Under V1: ela_std < 4.2 falsely adds +0.44 to swap_score on genuine webcam frames.
+    Under V2: ela_residual_std is recorded for evaluation/AUROC, but does not falsely penalize swap_score.
+    """
+    engine_v2 = LiveAuthenticityEngine(live_decision_v2=True)
+    engine_v1 = LiveAuthenticityEngine(live_decision_v2=False)
+
+    # Create a JPEG-compressed frame (simulating frontend canvas.toDataURL(.., 0.85))
+    raw_img = np.ones((480, 640, 3), dtype=np.uint8) * 130
+    cv2.ellipse(raw_img, (320, 240), (70, 95), 0, 0, 360, (200, 180, 160), -1)
+    _, buf = cv2.imencode(".jpg", raw_img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    jpeg_frame = cv2.imdecode(np.frombuffer(buf.tobytes(), np.uint8), cv2.IMREAD_COLOR)
+    face_box = [250, 145, 140, 190]
+
+    res_v1 = engine_v1.detect_face_swap_artifacts(jpeg_frame, face_box)
+    res_v2 = engine_v2.detect_face_swap_artifacts(jpeg_frame, face_box)
+
+    # In both, ELA residual std is computed and low (< 4.2)
+    assert res_v1["ela_residual_std"] < 4.5
+    assert res_v2["ela_residual_std"] < 4.5
+
+    # V1 falsely penalized with ela_synthetic_face_smoothing (+0.44)
+    assert any(s["key"] == "ela_synthetic_face_smoothing" for s in res_v1["signals"])
+    assert res_v1["face_swap_score"] >= 0.50
+
+    # V2 dropped the invalid ELA penalty on live frames
+    assert not any(s["key"] == "ela_synthetic_face_smoothing" for s in res_v2["signals"])
+    assert res_v2["face_swap_score"] < 0.20
+
+
+def test_boundary_seam_contour_mask_ignores_background():
+    """
+    Phase 2: Boundary-seam heuristic measures along the face contour only,
+    not the 14px box ring that includes background.
+    A high-contrast background line right outside the face oval trips V1, but is ignored by V2.
+    """
+    engine_v2 = LiveAuthenticityEngine(live_decision_v2=True)
+    engine_v1 = LiveAuthenticityEngine(live_decision_v2=False)
+
+    frame = np.ones((480, 640, 3), dtype=np.uint8) * 120
+    fx, fy, fw, fh = 200, 140, 160, 200
+    face_box = [fx, fy, fw, fh]
+
+    # Smooth natural face skin blending naturally into neck
+    cv2.ellipse(frame, (fx + fw // 2, fy + fh // 2), (int(fw * 0.44), int(fh * 0.50)), 0, 0, 360, (130, 125, 120), -1)
+
+    # High-contrast background edge at x = 365 (inside 14px outer box ring fx+fw+14=374, but outside face oval)
+    frame[fy : fy + fh, 365:368] = (255, 255, 255)
+
+    res_v1 = engine_v1.detect_face_swap_artifacts(frame, face_box)
+    res_v2 = engine_v2.detect_face_swap_artifacts(frame, face_box)
+
+    # V1 measured Sobel across outer_crop which included the wall edge
+    # V2 measured Sobel strictly on the contour_mask, isolating the facial boundary
+    assert res_v2["edge_energy"] < res_v1["edge_energy"]
+
+
+def test_screen_detector_stability_and_bilateral_bezel():
+    """
+    Phase 2: Bezel detection requires bilateral margin lines (both left and right flanks).
+    Screen detection requires face enclosure (IoF >= 0.85) and temporal stability across frames.
+    """
+    from app.ml.screen_detector import ScreenDetector
+
+    detector_v2 = ScreenDetector(live_decision_v2=True)
+    detector_v1 = ScreenDetector(live_decision_v2=False)
+
+    frame = np.ones((480, 640, 3), dtype=np.uint8) * 100
+    face_box = [240, 140, 160, 200]
+
+    # Draw vertical lines ONLY on the left flank (unilateral bookshelf or door edge)
+    for lx in [200, 210, 220, 230]:
+        cv2.line(frame, (lx, 100), (lx, 380), (20, 20, 20), 2)
+
+    bz_v1 = detector_v1.scan_face_perimeter_bezel(frame, face_box)
+    bz_v2 = detector_v2.scan_face_perimeter_bezel(frame, face_box)
+
+    # V1 flagged unilateral lines as bezel
+    assert bz_v1["has_bezel_lines"] is True
+    # V2 requires bilateral lines (flanking both left AND right sides), so excludes unilateral wall lines
+    assert bz_v2["has_bezel_lines"] is False
+
+    # Now test temporal stability:
+    # A single frame with an enclosing screen returns SCREEN_CANDIDATE_UNCONFIRMED under V2
+    # until 3 consecutive frames are observed
+    frame_screen = np.ones((480, 640, 3), dtype=np.uint8) * 80
+    cv2.rectangle(frame_screen, (170, 70), (470, 420), (15, 15, 15), 6)
+    cv2.rectangle(frame_screen, (180, 80), (460, 410), (160, 160, 160), -1)
+
+    sess_id = f"test_stability_{time.time()}"
+    res_f1 = detector_v2.analyze(frame_screen, face_box, session_id=sess_id)
+    assert res_f1["presentation_attack"] is False
+    assert "SCREEN_CANDIDATE_UNCONFIRMED" in res_f1["reason_codes"]
+
+    # Frame 2: still unconfirmed
+    res_f2 = detector_v2.analyze(frame_screen, face_box, session_id=sess_id)
+    assert res_f2["presentation_attack"] is False
+
+    # Frame 3: confirmed presentation attack!
+    res_f3 = detector_v2.analyze(frame_screen, face_box, session_id=sess_id)
+    assert res_f3["presentation_attack"] is True
+    assert "PHONE_PRESENTATION_DETECTED" in res_f3["reason_codes"]

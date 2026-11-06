@@ -32,6 +32,7 @@ class ScreenDetector:
     def __init__(self, attack_threshold: float = 0.55, live_decision_v2: Optional[bool] = None):
         self.attack_threshold = attack_threshold
         self.live_decision_v2 = live_decision_v2
+        self._session_screen_counts: Dict[str, int] = {}
 
     def is_v2_enabled(self) -> bool:
         if self.live_decision_v2 is not None:
@@ -185,11 +186,21 @@ class ScreenDetector:
 
         vertical_lines = 0
         horizontal_lines = 0
+        left_vertical = 0
+        right_vertical = 0
+        collar_face_left = max(0, fx) - max(0, fx - pad_w)
+        collar_face_right = collar_face_left + fw
+
         if lines is not None:
             for lx1, ly1, lx2, ly2 in lines.reshape(-1, 4):
                 ang = np.degrees(np.arctan2(abs(ly2 - ly1), abs(lx2 - lx1)))
                 if 75 <= ang <= 105:
                     vertical_lines += 1
+                    line_mid_x = (lx1 + lx2) / 2.0
+                    if line_mid_x < collar_face_left:
+                        left_vertical += 1
+                    elif line_mid_x > collar_face_right:
+                        right_vertical += 1
                 elif ang <= 15 or ang >= 165:
                     horizontal_lines += 1
 
@@ -200,8 +211,14 @@ class ScreenDetector:
         right_e = float(np.mean(np.abs(cv2.Sobel(right_strip, cv2.CV_64F, 1, 0, ksize=3)))) if right_strip.size > 0 else 0.0
         avg_e = (left_e + right_e) / 2.0
 
-        # Physical bezel signature: vertical straight edges bounding both sides with significant gradient energy
-        has_bezel = (vertical_lines >= 4 and avg_e > 25.0) or (vertical_lines >= 8)
+        if self.is_v2_enabled():
+            # Phase 2 V2: Exclude generic unilateral background shapes.
+            # A physical device bezel requires bilateral vertical boundary lines framing both sides of face.
+            has_bezel = bool(left_vertical >= 1 and right_vertical >= 1 and vertical_lines >= 4 and avg_e > 25.0)
+        else:
+            # Legacy V1: counts total vertical lines across collar regardless of symmetry
+            has_bezel = (vertical_lines >= 4 and avg_e > 25.0) or (vertical_lines >= 8)
+
         return {
             "has_bezel_lines": has_bezel,
             "vertical_lines": vertical_lines,
@@ -218,6 +235,53 @@ class ScreenDetector:
         """
         if face_crop_bgr.shape[0] < 30 or face_crop_bgr.shape[1] < 30:
             return {"moire_score": 0.0, "specular_score": 0.0}
+
+        if self.is_v2_enabled():
+            # Phase 2 V2: Periodic peak detector vs local median
+            h, w = face_crop_bgr.shape[:2]
+            gray = cv2.cvtColor(face_crop_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+            blurred = cv2.GaussianBlur(gray, (0, 0), sigmaX=3.0)
+            hp = gray - blurred
+            win_y = np.hanning(h)
+            win_x = np.hanning(w)
+            windowed = hp * np.outer(win_y, win_x)
+
+            f_shift = np.fft.fftshift(np.fft.fft2(windowed))
+            mag = np.log1p(np.abs(f_shift))
+
+            cy, cx = h // 2, w // 2
+            r_inner = max(5, int(min(cy, cx) * 0.15))
+            y_coords, x_coords = np.ogrid[:h, :w]
+            dist_sq = (x_coords - cx) ** 2 + (y_coords - cy) ** 2
+            valid_mask = dist_sq >= (r_inner ** 2)
+            valid_mask[:2, :] = False
+            valid_mask[-2:, :] = False
+            valid_mask[:, :2] = False
+            valid_mask[:, -2:] = False
+
+            try:
+                from scipy.ndimage import median_filter
+                local_med = median_filter(mag, size=11)
+            except Exception:
+                local_med = cv2.medianBlur(mag.astype(np.float32), 11)
+
+            ratio_map = mag / np.maximum(local_med, 1e-6)
+            peak_ratio = float(np.max(ratio_map[valid_mask])) if np.any(valid_mask) else 1.0
+            # Natural skin is smooth (~1.0 - 1.4); screen moire produces distinct spikes (> 1.8 - 2.5+)
+            moire_score = max(0.0, min(1.0, (peak_ratio - 1.6) / 2.0))
+
+            # Specular glass reflections
+            hsv = cv2.cvtColor(face_crop_bgr, cv2.COLOR_BGR2HSV)
+            val = hsv[:, :, 2]
+            sat = hsv[:, :, 1]
+            glare_pixels = (val > 245) & (sat < 35)
+            glare_ratio = float(np.mean(glare_pixels))
+            specular_score = max(0.0, min(1.0, glare_ratio * 25.0))
+
+            return {
+                "moire_score": round(moire_score, 3),
+                "specular_score": round(specular_score, 3),
+            }
 
         # Green channel has 2x Bayer subpixel density and captures OLED/LCD subpixel grid most accurately
         b, g, r = cv2.split(face_crop_bgr)
@@ -259,6 +323,7 @@ class ScreenDetector:
         face_box: Optional[List[int]],
         temporal_jitter: float = 1.0,
         is_liveness_proven: bool = False,
+        session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Executes screen detection, screen-face association, and presentation attack scoring.
@@ -307,7 +372,29 @@ class ScreenDetector:
                 center_inside_screen = is_center_in
 
         # Face containment: IoF >= 0.50 OR center of face inside detected screen with IoF >= 0.35
-        face_inside_screen = bool(max_iof >= 0.50 or (center_inside_screen and max_iof >= 0.35))
+        if self.is_v2_enabled():
+            # Phase 2 V2: Screen must strictly enclose the face (all margins bounded, IoF >= 0.85)
+            is_enclosed = False
+            if best_associated_screen is not None:
+                bx, by, bw, bh = best_associated_screen["box"]
+                is_enclosed = bool(bx <= fx and by <= fy and bx + bw >= fx + fw and by + bh >= fy + fh and max_iof >= 0.85)
+            face_inside_screen = is_enclosed
+
+            # Temporal persistence: screen must be stably detected across frames
+            if session_id:
+                if face_inside_screen:
+                    cnt = self._session_screen_counts.get(session_id, 0) + 1
+                    self._session_screen_counts[session_id] = cnt
+                    is_temporally_stable = (cnt >= 3)
+                else:
+                    self._session_screen_counts[session_id] = 0
+                    is_temporally_stable = False
+            else:
+                is_temporally_stable = True
+        else:
+            face_inside_screen = bool(max_iof >= 0.50 or (center_inside_screen and max_iof >= 0.35))
+            is_temporally_stable = True
+
         has_perimeter_bezel = bezel_info["has_bezel_lines"]
 
         screen_conf = best_associated_screen["confidence"] if best_associated_screen else (0.85 if has_perimeter_bezel else 0.0)
@@ -340,21 +427,27 @@ class ScreenDetector:
             reason_codes.append("BACKGROUND_SCREEN_NON_ATTACK")
             user_message = "Background monitor/TV detected; face in front of screen."
         elif face_inside_screen:
-            # Physical containment inside detected handheld device bezel
-            geo_evidence = (screen_conf * 0.45) + (assoc_conf * 0.45)
-            artifact_boost = (signals["moire_score"] * 0.10) + (signals["specular_score"] * 0.10)
-            if has_perimeter_bezel:
-                artifact_boost += 0.10
-            phys_evidence = min(0.99, max(0.80, geo_evidence + artifact_boost))
+            if self.is_v2_enabled() and not is_temporally_stable:
+                is_attack = False
+                presentation_attack_confidence = 0.35
+                reason_codes.append("SCREEN_CANDIDATE_UNCONFIRMED")
+                user_message = "Verifying display stability across frames..."
+            else:
+                # Physical containment inside detected handheld device bezel
+                geo_evidence = (screen_conf * 0.45) + (assoc_conf * 0.45)
+                artifact_boost = (signals["moire_score"] * 0.10) + (signals["specular_score"] * 0.10)
+                if has_perimeter_bezel:
+                    artifact_boost += 0.10
+                phys_evidence = min(0.99, max(0.80, geo_evidence + artifact_boost))
 
-            if temporal_jitter < 0.20:
-                phys_evidence = min(1.0, phys_evidence + 0.10)
+                if temporal_jitter < 0.20:
+                    phys_evidence = min(1.0, phys_evidence + 0.10)
 
-            presentation_attack_confidence = round(float(min(0.99, phys_evidence)), 2)
-            is_attack = True
-            reason_codes.append("PHONE_PRESENTATION_DETECTED")
-            reason_codes.append("SCREEN_FACE_DETECTED")
-            user_message = "A face appears to be displayed through a phone or electronic screen."
+                presentation_attack_confidence = round(float(min(0.99, phys_evidence)), 2)
+                is_attack = True
+                reason_codes.append("PHONE_PRESENTATION_DETECTED")
+                reason_codes.append("SCREEN_FACE_DETECTED")
+                user_message = "A face appears to be displayed through a phone or electronic screen."
         elif has_perimeter_bezel and signals["moire_score"] >= 0.45:
             if not self.is_v2_enabled():
                 # Device bezel directly framing the face combined with screen subpixel Moiré pattern

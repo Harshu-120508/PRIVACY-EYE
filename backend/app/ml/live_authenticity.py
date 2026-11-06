@@ -376,6 +376,105 @@ class LiveAuthenticityEngine:
         if face_crop_bgr.shape[0] < 30 or face_crop_bgr.shape[1] < 30:
             return {"replay_score": 0.20, "is_screen_likely": False, "signals": []}
 
+        if self.is_v2_enabled():
+            # Phase 2 V2 periodic-peak detector:
+            # 1. Luminance high-pass (subtract Gaussian blur to remove low-frequency face structure)
+            # 2. 2D Hanning window to prevent edge spectral leakage
+            # 3. 2D FFT & shift, log magnitude spectrum
+            # 4. Central DC mask (dist >= r_inner)
+            # 5. Local median filter (11x11) to isolate periodic delta spikes
+            h, w = face_crop_bgr.shape[:2]
+            gray_face = cv2.cvtColor(face_crop_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+            blurred = cv2.GaussianBlur(gray_face, (0, 0), sigmaX=3.0)
+            hp_luminance = gray_face - blurred
+
+            win_y = np.hanning(h)
+            win_x = np.hanning(w)
+            windowed = hp_luminance * np.outer(win_y, win_x)
+
+            f_transform = np.fft.fft2(windowed)
+            f_shift = np.fft.fftshift(f_transform)
+            magnitude_spectrum = np.log1p(np.abs(f_shift))
+
+            cy, cx = h // 2, w // 2
+            r_inner = max(5, int(min(cy, cx) * 0.15))
+            y_grid, x_grid = np.ogrid[:h, :w]
+            dist_sq = (x_grid - cx) ** 2 + (y_grid - cy) ** 2
+            valid_mask = dist_sq >= (r_inner ** 2)
+            valid_mask[:2, :] = False
+            valid_mask[-2:, :] = False
+            valid_mask[:, :2] = False
+            valid_mask[:, -2:] = False
+
+            try:
+                from scipy.ndimage import median_filter
+                local_med = median_filter(magnitude_spectrum, size=11)
+            except Exception:
+                local_med = cv2.medianBlur(magnitude_spectrum.astype(np.float32), 11)
+
+            ratio_map = magnitude_spectrum / np.maximum(local_med, 1e-6)
+            peak_to_median_ratio = float(np.max(ratio_map[valid_mask])) if np.any(valid_mask) else 1.0
+
+            # moire_ratio in V2 is the normalized periodic peak strength
+            # Smooth natural skin produces peak_to_median_ratio in [1.0, 1.4].
+            # Display moire creates distinct isolated harmonic spikes (> 1.8 - 2.5+).
+            moire_ratio = round(peak_to_median_ratio, 2)
+
+            # Specular & chrominance variance
+            hsv_face = cv2.cvtColor(face_crop_bgr, cv2.COLOR_BGR2HSV)
+            sat = hsv_face[:, :, 1]
+            sat_std = float(np.std(sat))
+
+            # Perimeter bezel analysis
+            bezel_lines = 0
+            has_bezel = False
+            if full_frame_bgr is not None and face_box is not None:
+                bezel_scan = self._screen_detector.scan_face_perimeter_bezel(full_frame_bgr, face_box)
+                has_bezel = bezel_scan.get("has_bezel_lines", False)
+                bezel_lines = bezel_scan.get("vertical_lines", 0)
+
+            replay_score = 0.08
+            signals = []
+
+            # Under V2: only corroborated periodic peaks elevate replay_score
+            if peak_to_median_ratio >= 2.1:
+                replay_score += 0.35
+                signals.append({
+                    "key": "screen_moire_peaks",
+                    "label": "High-frequency periodic Moiré patterns",
+                    "severity": "high",
+                    "detail": f"Fourier harmonic peak-to-median ratio ({peak_to_median_ratio:.2f}) indicates digital screen subpixel rasterization.",
+                })
+            elif peak_to_median_ratio >= 1.6:
+                replay_score += 0.18
+                signals.append({
+                    "key": "screen_subpixel_traces",
+                    "label": "Moderate rasterization frequency traces",
+                    "severity": "medium",
+                    "detail": f"Frequency spectrum shows isolated periodic interference consistent with display screens ({peak_to_median_ratio:.2f}x local median).",
+                })
+
+            if has_bezel:
+                replay_score += 0.25
+                signals.append({
+                    "key": "flanking_bezel_detected",
+                    "label": "Electronic device chassis / bezel framing face",
+                    "severity": "medium",
+                    "detail": f"Detected bilateral parallel vertical border lines ({bezel_lines}) enclosing face margins.",
+                })
+
+            if sat_std < 14.0:
+                replay_score += 0.10
+
+            replay_score = min(0.99, round(replay_score, 3))
+            return {
+                "replay_score": replay_score,
+                "is_screen_likely": replay_score >= 0.50,
+                "peak_to_median_ratio": round(peak_to_median_ratio, 2),
+                "moire_ratio": round(moire_ratio, 2),
+                "signals": signals,
+            }
+
         # 1. Green Channel 2D FFT Band Energy (Captures OLED PenTile & LCD subpixel raster grids)
         b, g, r = cv2.split(face_crop_bgr)
         h, w = g.shape[:2]
@@ -467,7 +566,10 @@ class LiveAuthenticityEngine:
 
     # ── 4. Face-Swap & Boundary Inconsistency Detection ───────────────────────
     def detect_face_swap_artifacts(
-        self, frame_bgr: np.ndarray, face_box: List[int]
+        self,
+        frame_bgr: np.ndarray,
+        face_box: List[int],
+        landmarks: Optional[Dict[str, List[int]]] = None,
     ) -> Dict[str, Any]:
         """
         Detects digital face-swap seams (DeepFaceLab, SimSwap, Roop).
@@ -475,6 +577,64 @@ class LiveAuthenticityEngine:
         """
         fx, fy, fw, fh = face_box
         h, w = frame_bgr.shape[:2]
+
+        if self.is_v2_enabled():
+            # Phase 2 V2:
+            # 1. Measure edge energy strictly along the face contour (ellipse / landmarks), NOT 14px box ring
+            # 2. Compute ELA std for measurement/AUROC, but do NOT penalize live frames (which are already JPEG q0.85)
+            # 3. Discontinuity across contour
+            cx, cy = fx + fw // 2, fy + fh // 2
+            ax, ay = int(fw * 0.44), int(fh * 0.50)
+
+            # Face contour mask (narrow elliptical band along face boundary)
+            contour_mask = np.zeros((h, w), dtype=np.uint8)
+            cv2.ellipse(contour_mask, (cx, cy), (ax + 3, ay + 3), 0, 0, 360, 255, -1)
+            cv2.ellipse(contour_mask, (cx, cy), (max(1, ax - 3), max(1, ay - 3)), 0, 0, 360, 0, -1)
+
+            gray_full = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+            sobel_x = cv2.Sobel(gray_full, cv2.CV_64F, 1, 0, ksize=3)
+            sobel_y = cv2.Sobel(gray_full, cv2.CV_64F, 0, 1, ksize=3)
+            grad_mag = np.sqrt(sobel_x ** 2 + sobel_y ** 2)
+            edge_energy = float(np.mean(grad_mag[contour_mask > 0])) if np.any(contour_mask > 0) else 0.0
+
+            # ELA check on face crop (calculated for telemetry / AUROC logging)
+            face_crop = frame_bgr[max(0, fy) : min(h, fy + fh), max(0, fx) : min(w, fx + fw)]
+            ela_std = 0.0
+            if face_crop.size > 0:
+                buf = io.BytesIO()
+                Image.fromarray(cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)).save(buf, format="JPEG", quality=80)
+                recompressed = np.array(Image.open(buf))
+                recompressed_bgr = cv2.cvtColor(recompressed, cv2.COLOR_RGB2BGR)
+                ela_diff = np.abs(face_crop.astype(np.float32) - recompressed_bgr.astype(np.float32))
+                ela_std = float(np.std(ela_diff))
+
+            # Inner vs outer skin color discontinuity across contour
+            inner_face_mask = np.zeros((h, w), dtype=np.uint8)
+            cv2.ellipse(inner_face_mask, (cx, cy), (max(1, ax - 4), max(1, ay - 4)), 0, 0, 360, 255, -1)
+            inner_pixels = frame_bgr[inner_face_mask > 0]
+            inner_hue_std = float(np.std(cv2.cvtColor(inner_pixels.reshape(-1, 1, 3), cv2.COLOR_BGR2HSV)[:, :, 0])) if len(inner_pixels) > 0 else 20.0
+
+            swap_score = 0.08
+            signals = []
+
+            # Under V2: ELA is invalid on live stream frames (already JPEG q0.85); do not apply false synthetic penalty
+            # Boundary seam detection only triggers if contour edge energy is anomalous AND inner hue is unnaturally uniform
+            if edge_energy > 65.0 and inner_hue_std < 8.0:
+                swap_score += 0.35
+                signals.append({
+                    "key": "boundary_blending_gradient",
+                    "label": "Perimeter blending seam detected",
+                    "severity": "high",
+                    "detail": f"Elevated facial contour edge energy ({edge_energy:.1f}) with uniform inner hue indicates face-swap mask blending.",
+                })
+
+            swap_score = min(0.95, round(swap_score, 3))
+            return {
+                "face_swap_score": swap_score,
+                "ela_residual_std": round(ela_std, 2),
+                "edge_energy": round(edge_energy, 1),
+                "signals": signals,
+            }
 
         # Inner face patch
         pad_x, pad_y = int(fw * 0.15), int(fh * 0.15)
@@ -1304,7 +1464,9 @@ class LiveAuthenticityEngine:
         replay_res = self.detect_screen_replay(face_crop, full_frame_bgr=img_bgr, face_box=face_box)
 
         # 4. Face-Swap & Boundary Artifacts
-        swap_res = self.detect_face_swap_artifacts(img_bgr, face_box)
+        swap_res = self.detect_face_swap_artifacts(
+            img_bgr, face_box, landmarks=landmarks if self.is_v2_enabled() else None
+        )
 
         # 4b. Landmark Benchmark Analyzers (FaceForensics++, Celeb-DF, Silent-Face, FFHQ)
         ff_res = self._faceforensics.full_forensics_scan(face_crop, img_bgr)
@@ -1554,6 +1716,7 @@ class LiveAuthenticityEngine:
             face_box=face_box,
             temporal_jitter=physiological_jitter,
             is_liveness_proven=is_liveness_proven,
+            session_id=session_id if self.is_v2_enabled() else None,
         )
         if self.is_v2_enabled():
             # (b) Replay evidence stays in the fusion after liveness checks; remove min(0.12, ...) clamp
