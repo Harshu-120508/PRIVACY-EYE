@@ -148,3 +148,11 @@ privacyeye.db
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Added security and eval exclusions
+**/.env
+**/.env.*
+**/.env.local
+eval_results*/
+backend/eval_results*/
+backend/*.db

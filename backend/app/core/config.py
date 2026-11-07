@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     DATABASE_URL_SYNC: str = "sqlite:///./privacyeye.db"
     AUTO_CREATE_TABLES: bool = False  # Schema managed via Alembic migrations
 
+    # Supabase
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_KEY: Optional[str] = None
+    SUPABASE_PROJECT_REF: Optional[str] = None
+
     # JWT
     JWT_SECRET_KEY: str = "change-me-jwt-secret-32-chars-min"
     JWT_ALGORITHM: str = "HS256"
