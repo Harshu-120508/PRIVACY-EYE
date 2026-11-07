@@ -20,7 +20,7 @@ configured_url = config.get_main_option("sqlalchemy.url")
 if not configured_url or configured_url == "sqlite:///./privacyeye.db":
     sync_url = settings.DATABASE_URL_SYNC
     if sync_url:
-        config.set_main_option("sqlalchemy.url", sync_url)
+        config.set_main_option("sqlalchemy.url", sync_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

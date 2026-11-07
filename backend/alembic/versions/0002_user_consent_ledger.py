@@ -29,9 +29,11 @@ def upgrade() -> None:
 
     # 2. Backfill status & timestamp on existing user_consents rows
     conn = op.get_bind()
-    conn.execute(text("""
+    is_pg = conn.dialect.name == "postgresql"
+    cond = "granted IS TRUE" if is_pg else "(granted = 1 OR granted IS TRUE)"
+    conn.execute(text(f"""
         UPDATE user_consents
-        SET status = CASE WHEN granted = 1 OR granted IS TRUE THEN 'granted' ELSE 'withdrawn' END,
+        SET status = CASE WHEN {cond} THEN 'granted' ELSE 'withdrawn' END,
             timestamp = COALESCE(granted_at, withdrawn_at, created_at, CURRENT_TIMESTAMP),
             method = 'UI'
         WHERE status IS NULL
