@@ -427,11 +427,13 @@ class ScreenDetector:
             reason_codes.append("BACKGROUND_SCREEN_NON_ATTACK")
             user_message = "Background monitor/TV detected; face in front of screen."
         elif face_inside_screen:
-            if self.is_v2_enabled() and not is_temporally_stable:
+            if self.is_v2_enabled():
+                # Phase 2A: Screen enclosure and temporal stability verified;
+                # Weight 0 and verdict contribution OFF until calibrated in Phase 3.
                 is_attack = False
-                presentation_attack_confidence = 0.35
-                reason_codes.append("SCREEN_CANDIDATE_UNCONFIRMED")
-                user_message = "Verifying display stability across frames..."
+                presentation_attack_confidence = 0.0
+                reason_codes.append("SCREEN_ENCLOSURE_STABLE_UNCALIBRATED" if is_temporally_stable else "SCREEN_CANDIDATE_UNCONFIRMED")
+                user_message = "Display enclosure observed; verdict contribution uncalibrated pending data."
             else:
                 # Physical containment inside detected handheld device bezel
                 geo_evidence = (screen_conf * 0.45) + (assoc_conf * 0.45)
@@ -457,17 +459,23 @@ class ScreenDetector:
                 reason_codes.append("SCREEN_FACE_DETECTED")
                 user_message = "A face appears to be displayed through a phone or electronic screen."
             else:
-                # Under V2: Hough background lines without a detected screen is a weak uncorroborated anomaly, NOT a confirmed attack
+                # Under V2: weight 0 until calibrated
                 is_attack = False
-                presentation_attack_confidence = round(signals["moire_score"] * 0.5, 2)
-                reason_codes.append("PERIMETER_BEZEL_CANDIDATE")
+                presentation_attack_confidence = 0.0
+                reason_codes.append("PERIMETER_BEZEL_CANDIDATE_UNCALIBRATED")
         elif signals["moire_score"] >= 0.85 and signals["specular_score"] >= 0.25:
-            # Harsh planar glass glare and intense screen frequency grid directly over the face
-            is_attack = True
-            presentation_attack_confidence = min(0.92, round(0.75 + (signals["moire_score"] * 0.15), 2))
-            reason_codes.append("PHONE_PRESENTATION_DETECTED")
-            reason_codes.append("SCREEN_FACE_DETECTED")
-            user_message = "A face appears to be displayed through a phone or electronic screen."
+            if not self.is_v2_enabled():
+                # Harsh planar glass glare and intense screen frequency grid directly over the face
+                is_attack = True
+                presentation_attack_confidence = min(0.92, round(0.75 + (signals["moire_score"] * 0.15), 2))
+                reason_codes.append("PHONE_PRESENTATION_DETECTED")
+                reason_codes.append("SCREEN_FACE_DETECTED")
+                user_message = "A face appears to be displayed through a phone or electronic screen."
+            else:
+                # Under V2: weight 0 until calibrated
+                is_attack = False
+                presentation_attack_confidence = 0.0
+                reason_codes.append("SPECULAR_MOIRE_CANDIDATE_UNCALIBRATED")
         else:
             # Case A: Phone is in scene, but face is NOT inside phone!
             presentation_attack_confidence = round(float(signals["moire_score"] * 0.20), 2)

@@ -433,43 +433,17 @@ class LiveAuthenticityEngine:
                 has_bezel = bezel_scan.get("has_bezel_lines", False)
                 bezel_lines = bezel_scan.get("vertical_lines", 0)
 
-            replay_score = 0.08
+            # Phase 2A: Signal calculation active for eval_live_scan.py telemetry,
+            # but thresholds UNSET and verdict contribution OFF (weight 0) until calibrated in Phase 3.
+            # moire_ratio: disabled pending data (non-discriminative: rises with noise, ignores periodicity; weight 0).
+            # peak_to_median_ratio: periodic-peak moire detector implemented per Garcia & de Queiroz (2015).
+            # Thresholds UNSET and verdict contribution OFF until calibrated on real recordings.
+            replay_score = 0.08  # Neutral baseline; verdict contribution OFF until calibrated
             signals = []
 
-            # Under V2: only corroborated periodic peaks elevate replay_score
-            if peak_to_median_ratio >= 2.1:
-                replay_score += 0.35
-                signals.append({
-                    "key": "screen_moire_peaks",
-                    "label": "High-frequency periodic Moiré patterns",
-                    "severity": "high",
-                    "detail": f"Fourier harmonic peak-to-median ratio ({peak_to_median_ratio:.2f}) indicates digital screen subpixel rasterization.",
-                })
-            elif peak_to_median_ratio >= 1.6:
-                replay_score += 0.18
-                signals.append({
-                    "key": "screen_subpixel_traces",
-                    "label": "Moderate rasterization frequency traces",
-                    "severity": "medium",
-                    "detail": f"Frequency spectrum shows isolated periodic interference consistent with display screens ({peak_to_median_ratio:.2f}x local median).",
-                })
-
-            if has_bezel:
-                replay_score += 0.25
-                signals.append({
-                    "key": "flanking_bezel_detected",
-                    "label": "Electronic device chassis / bezel framing face",
-                    "severity": "medium",
-                    "detail": f"Detected bilateral parallel vertical border lines ({bezel_lines}) enclosing face margins.",
-                })
-
-            if sat_std < 14.0:
-                replay_score += 0.10
-
-            replay_score = min(0.99, round(replay_score, 3))
             return {
                 "replay_score": replay_score,
-                "is_screen_likely": replay_score >= 0.50,
+                "is_screen_likely": False,
                 "peak_to_median_ratio": round(peak_to_median_ratio, 2),
                 "moire_ratio": round(moire_ratio, 2),
                 "signals": signals,
@@ -614,21 +588,14 @@ class LiveAuthenticityEngine:
             inner_pixels = frame_bgr[inner_face_mask > 0]
             inner_hue_std = float(np.std(cv2.cvtColor(inner_pixels.reshape(-1, 1, 3), cv2.COLOR_BGR2HSV)[:, :, 0])) if len(inner_pixels) > 0 else 20.0
 
-            swap_score = 0.08
+            # Phase 2A:
+            # 1. ELA on live frames: disabled pending data (non-discriminative: already JPEG q0.85 from frontend; weight 0)
+            #    Computed and exported as ela_residual_std for eval_live_scan.py AUROC measurement only.
+            # 2. Contour-based seam measurement: edge_energy measured strictly along facial contour mask (excluding background).
+            #    Thresholds UNSET and verdict contribution OFF (weight 0) until calibrated in Phase 3 on real recordings.
+            swap_score = 0.08  # Neutral baseline; verdict contribution OFF until calibrated
             signals = []
 
-            # Under V2: ELA is invalid on live stream frames (already JPEG q0.85); do not apply false synthetic penalty
-            # Boundary seam detection only triggers if contour edge energy is anomalous AND inner hue is unnaturally uniform
-            if edge_energy > 65.0 and inner_hue_std < 8.0:
-                swap_score += 0.35
-                signals.append({
-                    "key": "boundary_blending_gradient",
-                    "label": "Perimeter blending seam detected",
-                    "severity": "high",
-                    "detail": f"Elevated facial contour edge energy ({edge_energy:.1f}) with uniform inner hue indicates face-swap mask blending.",
-                })
-
-            swap_score = min(0.95, round(swap_score, 3))
             return {
                 "face_swap_score": swap_score,
                 "ela_residual_std": round(ela_std, 2),

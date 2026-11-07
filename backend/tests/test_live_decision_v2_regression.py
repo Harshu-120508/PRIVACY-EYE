@@ -39,7 +39,11 @@ def _get_test_face_frame(shift_x: int = 0, shift_y: int = 0) -> bytes:
 
 
 def _create_synthetic_face_frame(shift_x: int = 0, shift_y: int = 0) -> bytes:
-    """Creates a synthetic BGR frame with a clearly visible synthetic human-like face."""
+    """
+    SYNTHETIC PROXY - NOT ACCURACY.
+    Allowed only for unit/regression tests to verify invariant behavior.
+    NEVER used to set thresholds, weights, AUROC, or accuracy.
+    """
     img = np.ones((480, 640, 3), dtype=np.uint8) * 120
     cx, cy = 320 + shift_x, 240 + shift_y
     cv2.ellipse(img, (cx, cy), (90, 120), 0, 0, 360, (190, 170, 150), -1)
@@ -365,7 +369,9 @@ def test_moire_periodic_peak_detector_clean_skin_vs_moire():
 
     res_v2_moire = engine_v2.detect_screen_replay(screen_moire)
     assert res_v2_moire["peak_to_median_ratio"] > res_v2_clean["peak_to_median_ratio"]
-    assert res_v2_moire["replay_score"] > res_v2_clean["replay_score"]
+    # Phase 2A: thresholds UNSET and verdict contribution OFF (weight 0) until calibrated in Phase 3
+    assert res_v2_clean["replay_score"] == 0.08
+    assert res_v2_moire["replay_score"] == 0.08
 
 
 def test_ela_live_path_bypass_under_v2():
@@ -468,7 +474,51 @@ def test_screen_detector_stability_and_bilateral_bezel():
     res_f2 = detector_v2.analyze(frame_screen, face_box, session_id=sess_id)
     assert res_f2["presentation_attack"] is False
 
-    # Frame 3: confirmed presentation attack!
+    # Frame 3: screen enclosure and temporal stability verified;
+    # Under Phase 2A: weight 0 until calibrated in Phase 3
     res_f3 = detector_v2.analyze(frame_screen, face_box, session_id=sess_id)
-    assert res_f3["presentation_attack"] is True
-    assert "PHONE_PRESENTATION_DETECTED" in res_f3["reason_codes"]
+    assert res_f3["presentation_attack"] is False
+    assert "SCREEN_ENCLOSURE_STABLE_UNCALIBRATED" in res_f3["reason_codes"]
+
+
+def test_uncalibrated_signals_cannot_veto_bona_fide():
+    """
+    Phase 2A: Uncalibrated signals cannot veto alone.
+    When a genuine face is observed, uncalibrated moire, seam, or screen detection
+    have weight 0 and cannot veto the session into an attack label.
+    SYNTHETIC PROXY - NOT ACCURACY.
+    """
+    engine_v2 = LiveAuthenticityEngine(live_decision_v2=True)
+    frame_bytes = _create_synthetic_face_frame()
+    sess_id = f"test_uncalibrated_{time.time()}"
+    res = engine_v2.analyze_frame(frame_bytes, session_id=sess_id, run_challenge=False)
+    # Never an attack label with HIGH reliability from uncalibrated signals
+    assert not (res.get("assessment") == "POSSIBLE_REPLAY" and res.get("reliability") == "HIGH")
+
+
+def test_insufficient_evidence_never_high_reliability_replay():
+    """
+    Phase 2A: Insufficient evidence returns UNABLE_TO_DETERMINE,
+    never a HIGH-reliability POSSIBLE_REPLAY.
+    SYNTHETIC PROXY - NOT ACCURACY.
+    """
+    engine_v2 = LiveAuthenticityEngine(live_decision_v2=True)
+    frame_bytes = _create_synthetic_face_frame()
+
+    orig_fn = engine_v2.check_frame_quality
+    try:
+        engine_v2.check_frame_quality = lambda *args, **kwargs: {
+            "laplacian_var": 6.0,
+            "illumination_mean": 15.0,
+            "quality_index": 20.0,
+            "is_acceptable": False,
+            "is_sharp": False,
+            "is_well_lit": False,
+            "reason_codes": ["IMAGE_TOO_DARK", "IMAGE_BLURRY"],
+        }
+        sess_id = f"test_insufficient_ev_{time.time()}"
+        res = engine_v2.analyze_frame(frame_bytes, session_id=sess_id, run_challenge=False)
+        assert res["assessment"] == "UNABLE_TO_DETERMINE"
+        assert res["reliability"] == "LOW"
+    finally:
+        engine_v2.check_frame_quality = orig_fn
