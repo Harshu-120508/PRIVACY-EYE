@@ -115,6 +115,7 @@ def main():
     ap.add_argument("--out", default="eval_results")
     ap.add_argument("--fps", type=float, default=4.5, help="frames/sec sent by the frontend (default 4.5)")
     ap.add_argument("--max-sec", type=float, default=40.0)
+    ap.add_argument("--metadata", default=None, help="path to slice metadata CSV for Phase 4 fairness slices")
     args = ap.parse_args()
 
     sys.path.insert(0, str(Path(args.backend).resolve()))
@@ -276,6 +277,20 @@ def main():
     (out / "summary.txt").write_text(text, encoding="utf-8")
     print("\n" + text)
     print(f"\nWrote {out/'frames.csv'}, {out/'clips.csv'}, {out/'summary.txt'}")
+
+    # ---- Phase 4: Fairness Slices Report
+    meta_path = Path(args.metadata) if args.metadata else (data / "metadata.csv" if (data / "metadata.csv").exists() else None)
+    try:
+        from evaluation.eval_fairness_slices import run_fairness_evaluation
+        print("\n== PHASE 4: FAIRNESS SLICES EVALUATION ==")
+        fairness_res = run_fairness_evaluation(
+            clips_csv_path=out / "clips.csv",
+            metadata_csv_path=meta_path,
+            out_dir=out,
+        )
+        print(fairness_res.get("summary_text", ""))
+    except Exception as e:
+        print(f"\n[Phase 4 Fairness Note]: Could not run fairness slices: {e}")
 
 
 if __name__ == "__main__":
