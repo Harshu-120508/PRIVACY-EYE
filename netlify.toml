@@ -1,0 +1,11 @@
+# The Next.js frontend lives in /frontend. Netlify auto-detects Next.js and
+# applies the OpenNext adapter, so pages, server routes and rewrites work.
+# Dependencies are installed explicitly so the build works even when the
+# frontend folder has no pre-installed node_modules.
+[build]
+  base    = "frontend"
+  command = "npm ci --no-audit --no-fund && npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
