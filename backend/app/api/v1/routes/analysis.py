@@ -53,19 +53,49 @@ ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "a
 
 
 async def _validate_upload(file: UploadFile, allowed_types: set, max_bytes: int) -> bytes:
-    """Validate file type and size, return raw bytes."""
+    """
+    Validate file type and size using streaming chunks to prevent memory exhaustion (DoS).
+    Aborts stream reading as soon as max_bytes is exceeded.
+    """
     content_type = file.content_type or ""
     if content_type not in allowed_types:
         raise HTTPException(
             status_code=422,
             detail=f"Unsupported file type '{content_type}'. Allowed: {sorted(allowed_types)}",
         )
-    content = await file.read()
-    if len(content) > max_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum allowed: {max_bytes // (1024*1024)} MB",
-        )
+
+    chunks = []
+    total_bytes = 0
+    chunk_size = 64 * 1024  # 64 KB streaming buffer
+
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total_bytes += len(chunk)
+        if total_bytes > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File exceeds maximum allowed size ({max_bytes // (1024*1024)} MB).",
+            )
+        chunks.append(chunk)
+
+    if total_bytes == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    content = b"".join(chunks)
+
+    # Magic byte validation for images to prevent MIME-type spoofing
+    if content_type.startswith("image/"):
+        if content_type in ("image/jpeg", "image/jpg") and not content.startswith(b"\xff\xd8"):
+            raise HTTPException(status_code=422, detail="Invalid JPEG image format.")
+        elif content_type == "image/png" and not content.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise HTTPException(status_code=422, detail="Invalid PNG image format.")
+        elif content_type == "image/gif" and not (content.startswith(b"GIF87a") or content.startswith(b"GIF89a")):
+            raise HTTPException(status_code=422, detail="Invalid GIF image format.")
+        elif content_type == "image/webp" and not (content.startswith(b"RIFF") and b"WEBP" in content[:16]):
+            raise HTTPException(status_code=422, detail="Invalid WEBP image format.")
+
     return content
 
 

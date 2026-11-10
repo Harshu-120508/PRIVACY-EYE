@@ -52,21 +52,15 @@ api.interceptors.response.use(
   (r) => r,
   async (err: AxiosError) => {
     if (err.response?.status === 401 && !err.config?.url?.includes('/auth/login') && !err.config?.url?.includes('/auth/refresh')) {
-      const refresh = Cookies.get('refresh_token') || (typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null)
+      const refresh = Cookies.get('refresh_token')
       try {
         const res = await axios.post(`${BASE_URL}/auth/refresh`, { refresh_token: refresh }, { withCredentials: true })
-        const { access_token, refresh_token: new_refresh } = res.data
+        const { access_token } = res.data
         Cookies.set('access_token', access_token, { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: 7 })
         Cookies.set('logged_in', 'true', { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: 7 })
         if (typeof window !== 'undefined') {
           localStorage.setItem('access_token', access_token)
           localStorage.setItem('logged_in', 'true')
-        }
-        if (new_refresh) {
-          Cookies.set('refresh_token', new_refresh, { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: 30 })
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('refresh_token', new_refresh)
-          }
         }
         if (err.config) {
           err.config.headers.Authorization = `Bearer ${access_token}`
@@ -117,12 +111,6 @@ export const authApi = {
         localStorage.setItem('access_token', tokens.access_token)
       }
     }
-    if (tokens?.refresh_token) {
-      Cookies.set('refresh_token', tokens.refresh_token, { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: 30 })
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('refresh_token', tokens.refresh_token)
-      }
-    }
     Cookies.set('logged_in', 'true', { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: 30 })
     if (typeof window !== 'undefined') {
       localStorage.setItem('logged_in', 'true')
@@ -138,12 +126,6 @@ export const authApi = {
       Cookies.set('access_token', tokens.access_token, { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: expiresDays })
       if (typeof window !== 'undefined') {
         localStorage.setItem('access_token', tokens.access_token)
-      }
-    }
-    if (tokens?.refresh_token) {
-      Cookies.set('refresh_token', tokens.refresh_token, { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: expiresDays })
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('refresh_token', tokens.refresh_token)
       }
     }
     Cookies.set('logged_in', 'true', { secure: window.location.protocol === 'https:', sameSite: 'lax', expires: expiresDays })

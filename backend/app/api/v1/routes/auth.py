@@ -13,6 +13,8 @@ Endpoints:
 - GET    /api/v1/auth/sessions        — Inspect active user sessions
 - DELETE /api/v1/auth/sessions/{id}   — Terminate a specific session
 """
+import sys
+import os
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
@@ -65,12 +67,12 @@ def _set_auth_cookies(
     from app.core.security import decode_token
 
     is_prod = settings.APP_ENV == "production"
-    # Access token cookie (60 minutes) - Set httponly=False so frontend JS and headers are fully synchronized
+    # Access token cookie (60 minutes) - HttpOnly in production for XSS defense-in-depth
     response.set_cookie(
         key="access_token",
         value=access_token,
         max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        httponly=False,
+        httponly=is_prod,
         secure=is_prod,
         samesite="lax",
         path="/",
@@ -173,6 +175,9 @@ async def register(
     )
 
 
+DUMMY_ARGON2_HASH = "$argon2id$v=19$m=65536,t=2,p=4$t8OR48ysqHX+GIgWXCimEg$vPB5ot0YrzAM8h64wTsoRH33pnaN3ifbB9+22ZmjE24"
+
+
 @router.post("/login", response_model=AuthSuccessResponse)
 async def login(
     body: UserLoginRequest,
@@ -182,8 +187,17 @@ async def login(
 ):
     """Authenticate credentials against PostgreSQL and issue a persistent session."""
     user = await user_service.get_by_email(db, body.email)
-    if not user or not verify_password(body.password, user.hashed_password):
-        # Prevent timing attacks and user enumeration
+    
+    # Constant-time verification: prevent timing attacks and account enumeration
+    if not user:
+        verify_password(body.password, DUMMY_ARGON2_HASH)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not verify_password(body.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
@@ -402,7 +416,7 @@ async def forgot_password(
             action="PASSWORD_RESET_REQUESTED",
         ))
         await db.commit()
-        if settings.APP_ENV != "production":
+        if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
             response.headers["X-Dev-Reset-Token"] = raw_reset
         logger.info("Password reset token generated", user_id=user.id)
 
