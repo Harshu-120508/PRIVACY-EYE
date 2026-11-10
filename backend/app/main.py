@@ -64,14 +64,22 @@ cors_origins = settings.CORS_ORIGINS
 if isinstance(cors_origins, str):
     cors_origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
 
-# In production, allow configured origins plus dynamic Vercel preview/production domains
+# Clean origins: never permit wildcard "*" with credentials enabled (OWASP CORS violation)
+clean_origins = [o for o in cors_origins if o != "*"]
+if not clean_origins:
+    clean_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+# In production, allow verified Vercel preview/production domains; never permit catch-all regex
+origin_regex = r"^https:\/\/[a-zA-Z0-9\-_]+(\.vercel\.app)$" if settings.APP_ENV == "production" else None
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins if ("*" not in cors_origins) else ["*"],
-    allow_origin_regex=r"^https?://.*" if ("*" in cors_origins or settings.APP_ENV != "production") else r"^https://.*\.vercel\.app$",
+    allow_origins=clean_origins,
+    allow_origin_regex=origin_regex,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID", "Content-Disposition"],
 )
 allowed_hosts = settings.ALLOWED_HOSTS
 if isinstance(allowed_hosts, str):

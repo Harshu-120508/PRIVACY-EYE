@@ -4,6 +4,7 @@ Falls back to structured template if Gemini is unavailable.
 """
 import uuid
 import json
+import html
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -177,18 +178,26 @@ Format your response as JSON:
             )
 
     def generate_html_certificate(self, report: Report, analysis: MediaAnalysis) -> str:
-        """Generate a standalone, print-optimized HTML forensic certificate."""
+        """Generate a standalone, print-optimized HTML forensic certificate with full XSS sanitization."""
         rep_json = report.report_json or {}
         file_info = rep_json.get("file", {})
         assessment = rep_json.get("assessment", {})
         signals = rep_json.get("detected_signals", [])
-        risk_level = assessment.get("risk_level", analysis.risk_level.value if analysis.risk_level else "UNDETERMINED")
+        raw_risk = assessment.get("risk_level", analysis.risk_level.value if analysis.risk_level else "UNDETERMINED")
+        risk_level = html.escape(str(raw_risk))
         synth_prob = assessment.get("synthetic_probability")
         prob_str = f"{synth_prob:.1%}" if synth_prob is not None else "N/A"
         conf = assessment.get("confidence")
         conf_str = f"{conf:.1%}" if conf is not None else "N/A"
-        sha256 = file_info.get("sha256", analysis.file_sha256 or "N/A")
-        gen_at = rep_json.get("generated_at", datetime.now(timezone.utc).isoformat())
+        sha256 = html.escape(str(file_info.get("sha256", analysis.file_sha256 or "N/A")))
+        gen_at = html.escape(str(rep_json.get("generated_at", datetime.now(timezone.utc).isoformat())))
+        cert_id = html.escape(str(report.id[:16]))
+
+        # Sanitized provenance values
+        safe_filename = html.escape(str(analysis.original_filename or "unnamed_media"))
+        safe_media_type = html.escape(str(analysis.media_type.value if analysis.media_type else "UNKNOWN"))
+        safe_mime_type = html.escape(str(analysis.mime_type or "unspecified"))
+        safe_summary = html.escape(str(report.summary or analysis.explanation or "Media assessed using multi-signal spectral and biometric forensic pipeline."))
 
         badge_color = {
             "LOW": "#10b981",
@@ -196,18 +205,21 @@ Format your response as JSON:
             "HIGH": "#f97316",
             "CRITICAL": "#ef4444",
             "UNDETERMINED": "#6b7280",
-        }.get(risk_level, "#6b7280")
+        }.get(raw_risk, "#6b7280")
 
         signal_rows = ""
         for sig in signals:
             score_val = sig.get("score")
             score_fmt = f"{score_val:.1%}" if score_val is not None else "Observed"
+            sig_label = html.escape(str(sig.get('label', sig.get('key', 'Signal'))))
+            sig_sev = html.escape(str(sig.get('severity', 'info')).upper())
+            sig_desc = html.escape(str(sig.get('description', '')))
             signal_rows += f"""
             <tr>
-              <td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">{sig.get('label', sig.get('key'))}</td>
-              <td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb;"><span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; background: #f3f4f6; color: #374151;">{sig.get('severity', 'info').upper()}</span></td>
+              <td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">{sig_label}</td>
+              <td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb;"><span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; background: #f3f4f6; color: #374151;">{sig_sev}</span></td>
               <td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-family: monospace;">{score_fmt}</td>
-              <td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb; color: #4b5563; font-size: 13px;">{sig.get('description', '')}</td>
+              <td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb; color: #4b5563; font-size: 13px;">{sig_desc}</td>
             </tr>
             """
 
@@ -222,13 +234,13 @@ Format your response as JSON:
         for line in (report.recommendations or "").split("\n"):
             line = line.strip().lstrip("•").strip()
             if line:
-                recs_list += f"<li style='margin-bottom: 6px;'>{line}</li>"
+                recs_list += f"<li style='margin-bottom: 6px;'>{html.escape(line)}</li>"
 
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Privacy Eye Forensic Certificate — {analysis.original_filename}</title>
+  <title>Privacy Eye Forensic Certificate — {safe_filename}</title>
   <style>
     @page {{
       size: A4;
@@ -416,7 +428,7 @@ Format your response as JSON:
         <div class="brand-subtitle">Forensic Authenticity Certificate</div>
       </div>
       <div class="cert-meta">
-        <div><strong>Certificate ID:</strong> {report.id[:16]}</div>
+        <div><strong>Certificate ID:</strong> {cert_id}</div>
         <div><strong>Issued:</strong> {gen_at[:19].replace('T', ' ')} UTC</div>
         <div><strong>Engine:</strong> PrivacyEye-Ensemble-v1</div>
       </div>
@@ -445,10 +457,10 @@ Format your response as JSON:
 
     <div class="section-title">Cryptographic Media Provenance</div>
     <div style="font-size: 13px; color: #4b5563; margin-bottom: 4px;">
-      <strong>File:</strong> {analysis.original_filename} &nbsp;|&nbsp;
-      <strong>Type:</strong> {analysis.media_type.value} &nbsp;|&nbsp;
+      <strong>File:</strong> {safe_filename} &nbsp;|&nbsp;
+      <strong>Type:</strong> {safe_media_type} &nbsp;|&nbsp;
       <strong>Size:</strong> {analysis.file_size_bytes or 0:,} bytes &nbsp;|&nbsp;
-      <strong>MIME:</strong> {analysis.mime_type or 'unspecified'}
+      <strong>MIME:</strong> {safe_mime_type}
     </div>
     <div class="hash-box">
       SHA-256: {sha256}
@@ -456,7 +468,7 @@ Format your response as JSON:
 
     <div class="section-title">Executive Forensic Summary</div>
     <div class="summary-text">
-      {report.summary or analysis.explanation or "Media assessed using multi-signal spectral and biometric forensic pipeline."}
+      {safe_summary}
     </div>
 
     <div class="section-title">Forensic Signal Indicators</div>

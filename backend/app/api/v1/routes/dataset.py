@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.database.session import get_db
-from app.database.models import DatasetRecord, FailureCase, ModelRegistry
+from app.database.models import DatasetRecord, FailureCase, ModelRegistry, User
+from app.core.security import get_current_user, require_admin
 from app.schemas.schemas import (
     DatasetRecordCreate,
     DatasetRecordResponse,
@@ -37,8 +38,9 @@ _failure_manager = FailureCaseManager()
 async def create_dataset_record(
     record: DatasetRecordCreate,
     db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
 ):
-    """Registers a sample into the dataset system with full provenance and licensing verification."""
+    """Registers a sample into the dataset system with full provenance and licensing verification (Admin only)."""
     result = await db.execute(select(DatasetRecord).where(DatasetRecord.sample_id == record.sample_id))
     existing = result.scalars().first()
     if existing:
@@ -80,6 +82,7 @@ async def list_dataset_records(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Queries dataset records filtered by category (A-E) and split."""
     stmt = select(DatasetRecord)
@@ -93,7 +96,10 @@ async def list_dataset_records(
 
 
 @router.get("/stats", response_model=DatasetSummaryStats)
-async def get_dataset_stats(db: AsyncSession = Depends(get_db)):
+async def get_dataset_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Computes distribution metrics across Categories A-E, splits, and consent compliance."""
     total_res = await db.execute(select(func.count(DatasetRecord.id)))
     total = total_res.scalar() or 0
@@ -123,7 +129,10 @@ async def get_dataset_stats(db: AsyncSession = Depends(get_db)):
 # ── Quality Gate ─────────────────────────────────────────────────────────────
 
 @router.post("/quality-gate", response_model=QualityGateResponse)
-def evaluate_quality_gate(payload: QualityGateRequest):
+def evaluate_quality_gate(
+    payload: QualityGateRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Evaluates input optical, exposure, blur, and resolution quality before heavy inference.
     Rejects degraded inputs with recommended user guidance.
@@ -165,6 +174,7 @@ def evaluate_quality_gate(payload: QualityGateRequest):
 async def log_failure_case(
     payload: FailureCaseCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Logs an authenticated model failure for investigation and hard-negative mining."""
     rec = _failure_manager.log_failure(
@@ -206,8 +216,9 @@ async def list_failure_cases(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
 ):
-    """Queries logged failure cases, highlighting high-confidence mistakes."""
+    """Queries logged failure cases, highlighting high-confidence mistakes (Admin only)."""
     stmt = select(FailureCase)
     if high_confidence_only:
         stmt = stmt.where(FailureCase.confidence >= 0.75)
@@ -219,16 +230,17 @@ async def list_failure_cases(
 @router.post("/failure-cases/{failure_id}/review", response_model=FailureCaseResponse)
 async def review_failure_case(
     failure_id: str,
-    reviewer_id: str = Query(..., description="ID of authenticated researcher/reviewer"),
     approve_for_retraining: bool = Query(True),
     db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
 ):
-    """Human-in-the-loop review approval before promotion to dataset."""
+    """Human-in-the-loop review approval before promotion to dataset (Admin only)."""
     result = await db.execute(select(FailureCase).where(FailureCase.failure_id == failure_id))
     db_rec = result.scalars().first()
     if not db_rec:
         raise HTTPException(status_code=404, detail="Failure case not found")
 
+    reviewer_id = admin.id
     db_rec.is_verified_by_human = True
     db_rec.reviewed_by = reviewer_id
     db_rec.added_to_training_set = approve_for_retraining
