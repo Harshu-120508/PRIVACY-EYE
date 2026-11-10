@@ -28,8 +28,8 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
-    Simple in-memory sliding-window rate limiter.
-    For production, replace with Redis-backed limiter (e.g. slowapi).
+    In-memory sliding-window rate limiter with automatic stale key pruning.
+    For high-scale multi-worker clusters, pair with Redis-backed limiter.
     """
 
     def __init__(self, app, calls: int = 30, period: int = 60):
@@ -37,6 +37,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.calls = calls
         self.period = period
         self._requests: dict[str, list] = defaultdict(list)
+        self._last_prune = time.time()
 
     async def dispatch(self, request: Request, call_next):
         # Skip rate limiting in automated test runs or for health/live frame paths
@@ -48,11 +49,26 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         ):
             return await call_next(request)
 
-        client_ip = request.client.host if request.client else "unknown"
+        # Resolve client IP (supporting reverse proxies like Cloudflare/Vercel/Render)
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            client_ip = forwarded.split(",")[0].strip()
+        elif request.client and request.client.host:
+            client_ip = request.client.host
+        else:
+            client_ip = "unknown"
+
         now = time.time()
         window_start = now - self.period
 
-        # Prune old requests
+        # Periodic purge of stale IP entries to prevent memory exhaustion
+        if now - self._last_prune > 300 or len(self._requests) > 10000:
+            stale_keys = [k for k, v in self._requests.items() if not v or max(v) < window_start]
+            for k in stale_keys:
+                self._requests.pop(k, None)
+            self._last_prune = now
+
+        # Prune old requests for current IP
         self._requests[client_ip] = [t for t in self._requests[client_ip] if t > window_start]
 
         if len(self._requests[client_ip]) >= self.calls:

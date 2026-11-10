@@ -81,6 +81,20 @@ class Settings(BaseSettings):
         os.makedirs(self.TEMP_UPLOAD_DIR, exist_ok=True)
         os.makedirs(self.MODEL_CACHE_DIR, exist_ok=True)
 
+    def validate_production_secrets(self) -> None:
+        """Enforce strong, non-default cryptographic secrets in production."""
+        if self.APP_ENV == "production":
+            insecure_defaults = [
+                "change-me-in-production-must-be-32-chars",
+                "change-me-jwt-secret-32-chars-min",
+                "your-super-secret-key-here-min-32-chars",
+                "your-jwt-secret-key-here-min-32-chars",
+            ]
+            if self.APP_SECRET_KEY in insecure_defaults or len(self.APP_SECRET_KEY) < 32:
+                raise ValueError("CRITICAL SECURITY VIOLATION: APP_SECRET_KEY must be a unique 32+ character random secret in production.")
+            if self.JWT_SECRET_KEY in insecure_defaults or len(self.JWT_SECRET_KEY) < 32:
+                raise ValueError("CRITICAL SECURITY VIOLATION: JWT_SECRET_KEY must be a unique 32+ character random secret in production.")
+
 
 settings = Settings()
 settings.ensure_temp_dir()

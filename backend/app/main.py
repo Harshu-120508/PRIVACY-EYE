@@ -21,6 +21,7 @@ logger = structlog.get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan — startup & shutdown."""
+    settings.validate_production_secrets()
     logger.info("Privacy Eye API starting", version=settings.APP_VERSION, env=settings.APP_ENV)
     # Database schema is managed via Alembic migrations.
     # Base.metadata.create_all is gated behind explicit dev-only AUTO_CREATE_TABLES flag.

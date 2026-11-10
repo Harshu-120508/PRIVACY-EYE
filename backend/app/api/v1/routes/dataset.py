@@ -70,7 +70,7 @@ async def create_dataset_record(
         metadata_json=record.metadata_json,
     )
     db.add(db_rec)
-    await db.flush()
+    await db.commit()
     await db.refresh(db_rec)
     return db_rec
 
@@ -205,7 +205,7 @@ async def log_failure_case(
         added_to_training_set=rec.added_to_training_set,
     )
     db.add(db_rec)
-    await db.flush()
+    await db.commit()
     await db.refresh(db_rec)
     return db_rec
 
@@ -244,7 +244,7 @@ async def review_failure_case(
     db_rec.is_verified_by_human = True
     db_rec.reviewed_by = reviewer_id
     db_rec.added_to_training_set = approve_for_retraining
-    await db.flush()
+    await db.commit()
     await db.refresh(db_rec)
 
     _failure_manager.review_and_approve(failure_id, reviewer_id, approve_for_retraining)
