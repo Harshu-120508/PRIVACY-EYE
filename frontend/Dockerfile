@@ -5,6 +5,7 @@ RUN npm ci
 
 FROM base AS builder
 COPY . .
+ENV OUTPUT_STANDALONE=true
 RUN npm run build
 
 FROM node:20-alpine AS runner
