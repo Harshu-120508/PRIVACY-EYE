@@ -1,0 +1,45 @@
+# ==============================================================================
+# Vercel Deployment Exclusions
+# Excludes backend, datasets, ML weights, tests, and heavy assets from Vercel.
+# ==============================================================================
+
+# Backend Python service & environments
+backend/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Heavy ML Weights & Datasets (Hosted externally on Hugging Face)
+datasets/
+models/
+models_cache/
+evaluation/
+ml/
+*.onnx
+*.pt
+*.pth
+*.safetensors
+*.bin
+*.h5
+*.xml
+
+# Documentation, evaluations, and tools
+docs/
+tools/
+deploy_hf_staging/
+
+# Temporary media & database files
+tmp/
+temp/
+uploads/
+*.db
+*.sqlite
+*.sqlite3
+*.mp4
+*.avi
+*.mov
+*.zip
+*.tar
+*.tar.gz

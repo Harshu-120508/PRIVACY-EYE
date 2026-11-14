@@ -1,16 +1,20 @@
 /** @type {import('next').NextConfig} */
-// Output static HTML export ('out' folder) for Cloudflare Pages by default,
-// or 'standalone' when building containerized Docker images.
+// Adaptive deployment target:
+// 1. Docker: OUTPUT_STANDALONE=true -> 'standalone'
+// 2. Vercel: VERCEL=1 -> native Next.js serverless with rewrites & headers
+// 3. Cloudflare Pages: default -> static HTML export ('out' directory)
 const isStandalone = process.env.OUTPUT_STANDALONE === 'true';
+const isVercel = process.env.VERCEL === '1';
+const isExport = !isStandalone && !isVercel;
 
 const nextConfig = {
-  output: isStandalone ? 'standalone' : 'export',
+  ...(isStandalone ? { output: 'standalone' } : isExport ? { output: 'export' } : {}),
   reactStrictMode: true,
   images: {
-    unoptimized: !isStandalone,
+    unoptimized: isExport,
     domains: ['localhost'],
   },
-  ...(isStandalone ? {
+  ...(!isExport ? {
     async headers() {
       return [
         {
@@ -23,7 +27,7 @@ const nextConfig = {
             { key: 'Permissions-Policy',     value: 'camera=(self), microphone=(self), geolocation=()' },
           ],
         },
-      ]
+      ];
     },
     async rewrites() {
       let rawBackend = process.env.BACKEND_API_URL;
@@ -47,9 +51,9 @@ const nextConfig = {
           source: '/openapi.json',
           destination: `${backendUrl}/openapi.json`,
         },
-      ]
+      ];
     },
   } : {}),
-}
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;
