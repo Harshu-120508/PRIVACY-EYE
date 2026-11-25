@@ -12,6 +12,9 @@ import { getErrorMessage } from '@/lib/api'
 import { BrandLogo } from '@/components/layout/BrandLogo'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { GlassButton } from '@/components/ui/GlassButton'
+import Beams from '@/components/reactbits/Beams'
+import DecryptedText from '@/components/reactbits/DecryptedText'
+import { AgentWaveCanvas } from '@/components/motion/AgentWaveCanvas'
 
 interface LoginForm {
   email: string
@@ -59,16 +62,24 @@ function LoginFormContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-canvas relative">
-      {/* Background ambient lighting */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-white/[0.025] rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-white/[0.02] rounded-full blur-[100px] pointer-events-none" />
+    <div className="min-h-screen flex items-center justify-center p-4 bg-canvas relative overflow-hidden">
+      {/* Agent Wave Waveform + React Bits Volumetric Beams */}
+      <div className="absolute inset-0 pointer-events-none z-0">
+        <AgentWaveCanvas className="absolute inset-0" opacity={0.45} speed={0.011} amplitude={34} />
+        <Beams
+          color="#ffffff"
+          opacity={0.14}
+          beamWidth={2.2}
+          speed={1.1}
+          mouseInteraction={true}
+        />
+      </div>
 
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-md"
+        initial={{ opacity: 0, y: 20, filter: 'blur(8px)' }}
+        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+        transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-md relative z-10"
       >
         <div className="flex justify-center mb-8">
           <BrandLogo size="lg" />
@@ -76,11 +87,21 @@ function LoginFormContent() {
 
         <GlassCard variant="floating" className="p-8 md:p-10 space-y-6 border border-white/14">
           <div className="text-center space-y-1">
-            <span className="text-xs uppercase font-mono tracking-widest text-white/80">
-              Secure Perimeter Access
+            <span className="text-xs uppercase font-mono tracking-widest text-white/80 block">
+              <DecryptedText
+                text="Secure Perimeter Access"
+                animateOn="view"
+                sequential
+                speed={40}
+              />
             </span>
-            <h1 className="text-2xl font-bold tracking-tight text-white">Sign In to Privacy Eye</h1>
-            <p className="text-xs text-white/50">Enter credentials to unlock active protection</p>
+            <h1 className="text-2xl font-bold tracking-tight text-white">
+              Sign In to{' '}
+              <span className="font-editorial-italic text-[#b4b4bc] text-[1.12em]">
+                Privacy Eye
+              </span>
+            </h1>
+            <p className="text-xs text-[#9a9a9a]">Enter credentials to unlock active protection</p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -150,7 +171,7 @@ function LoginFormContent() {
               variant="primary"
               size="lg"
               isLoading={loading}
-              className="w-full mt-2"
+              className="w-full mt-2 btn-liquid-metal"
               icon={<ArrowRight className="w-4 h-4" />}
             >
               Sign In

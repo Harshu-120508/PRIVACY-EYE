@@ -287,4 +287,77 @@
     box-shadow: 0 0 10px #4ADE80;
     animation: pulse 2s infinite;
   }
+
+  /* ── MotionSites Agent Wave Surfaces & Editorial Typography ── */
+  .font-editorial-italic {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: -0.025em;
+  }
+
+  .btn-liquid-metal {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background: linear-gradient(180deg, #ffffff 0%, #ebebeb 52%, #d4d4d8 100%);
+    color: #09090b;
+    border: 1px solid #ffffff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 0 24px rgba(255, 255, 255, 0.16);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s ease, filter 0.3s ease;
+  }
+
+  .btn-liquid-metal::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(115deg, transparent 22%, rgba(255, 255, 255, 0.65) 50%, transparent 78%);
+    transform: translateX(-130%);
+    transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .btn-liquid-metal:hover {
+    box-shadow: inset 0 1px 0 #ffffff, 0 0 30px rgba(255, 255, 255, 0.32), 0 10px 22px rgba(255, 255, 255, 0.12);
+  }
+
+  .btn-liquid-metal:hover::after {
+    transform: translateX(130%);
+  }
+
+  .pill-liquid-metal {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(105deg, rgba(12, 12, 12, 0.85) 0%, rgba(42, 42, 42, 0.55) 50%, rgba(68, 68, 72, 0.45) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .pill-liquid-metal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.18) 50%, transparent 70%);
+    transform: translateX(-125%);
+    transition: transform 0.6s ease;
+  }
+
+  .pill-liquid-metal:hover {
+    border-color: rgba(255, 255, 255, 0.55);
+    box-shadow: 0 0 18px rgba(255, 255, 255, 0.14);
+  }
+
+  .pill-liquid-metal:hover::before {
+    transform: translateX(125%);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn-liquid-metal::after,
+    .pill-liquid-metal::before {
+      transition: none;
+      transform: none;
+    }
+  }
 }

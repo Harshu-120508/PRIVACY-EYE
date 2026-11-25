@@ -26,6 +26,12 @@ import { GlassButton } from '@/components/ui/GlassButton'
 import { GlassBadge } from '@/components/ui/GlassBadge'
 import { Footer } from '@/components/layout/Footer'
 import { Hero3DScene } from '@/components/landing/Hero3DScene'
+import Particles from '@/components/reactbits/Particles'
+import GridScan from '@/components/reactbits/GridScan'
+import SpotlightCard from '@/components/reactbits/SpotlightCard'
+import DecryptedText from '@/components/reactbits/DecryptedText'
+import { AgentWaveCanvas } from '@/components/motion/AgentWaveCanvas'
+import { ScrollRevealText } from '@/components/motion/ScrollRevealText'
 import { authApi, getErrorMessage } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { useRouter } from 'next/navigation'
@@ -151,7 +157,7 @@ export default function LandingPage() {
             </a>
           </nav>
 
-          {/* Right Action Buttons with 3D tactile clicks */}
+          {/* Right Action Buttons with Liquid-Metal MotionSites finish */}
           <div className="flex items-center gap-3">
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -160,7 +166,7 @@ export default function LandingPage() {
                 setAuthMode('LOGIN')
                 setAuthModalOpen(true)
               }}
-              className="text-xs font-semibold px-4 py-2 rounded-full glass-surface hover:bg-white/10 text-white/80 transition-all border border-white/10 cursor-pointer"
+              className="text-xs font-semibold px-4 py-2 rounded-full pill-liquid-metal text-white/90 cursor-pointer"
             >
               Sign In
             </motion.button>
@@ -172,7 +178,7 @@ export default function LandingPage() {
                 setAuthMode('REGISTER')
                 setAuthModalOpen(true)
               }}
-              className="text-xs font-bold px-5 py-2 rounded-full bg-white text-black hover:bg-neutral-200 border border-white transition-all cursor-pointer shadow-md"
+              className="text-xs font-bold px-5 py-2 rounded-full btn-liquid-metal cursor-pointer"
             >
               Get Started
             </motion.button>
@@ -180,49 +186,145 @@ export default function LandingPage() {
         </motion.div>
       </header>
 
-      {/* ── HERO 3D INTERACTIVE EXPERIENCE (Section 11 & User Reference Photo) ── */}
-      <section id="hero-3d" className="relative pt-32 md:pt-40 pb-16 px-4 md:px-8 max-w-7xl mx-auto w-full flex flex-col items-center text-center">
-        {/* Top Badge */}
+      {/* ── HERO 3D INTERACTIVE EXPERIENCE (Agent Wave + React Bits) ── */}
+      <section id="hero-3d" className="relative pt-32 md:pt-40 pb-12 px-4 md:px-8 max-w-7xl mx-auto w-full flex flex-col items-center text-center">
+        {/* Agent Wave Sinusoidal Backdrop + Particle Field */}
+        <div
+          className="fixed inset-x-0 top-0 h-[920px] pointer-events-none z-0"
+          style={{
+            maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 55%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 55%, transparent 100%)',
+          }}
+        >
+          <AgentWaveCanvas className="absolute inset-0" opacity={0.55} speed={0.013} amplitude={42} />
+          <Particles
+            particleCount={65}
+            particleSpread={9}
+            speed={0.11}
+            particleColors={['#ffffff', '#d4d4d8', '#71717a']}
+            moveParticlesOnHover={true}
+            particleHoverFactor={0.5}
+            alphaParticles={true}
+            particleBaseSize={80}
+            connections={true}
+            connectionDistance={115}
+            opacity={0.38}
+          />
+        </div>
+
+        {/* Top Badge (Blur-Rise Entrance) */}
         <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass-surface border border-white/20 mb-6 text-xs font-mono text-white/90"
+          initial={{ opacity: 0, y: 16, filter: 'blur(8px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.85, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 inline-flex items-center gap-2 px-4 py-1.5 rounded-full pill-liquid-metal mb-6 text-xs font-mono text-white/90"
         >
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
           </span>
-          <span>INTERACTIVE 3D PARALLAX · MOVE CURSOR & SCROLL</span>
+          <DecryptedText
+            text="OPERATIONAL AUTHENTICITY INFRASTRUCTURE · MOVE CURSOR & SCROLL"
+            animateOn="view"
+            sequential
+            speed={32}
+            revealDirection="start"
+          />
         </motion.div>
 
-        {/* Main Title */}
+        {/* Main Title (Agent Wave Mixed Sans + Instrument Serif Italic Accent) */}
         <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7 }}
-          className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tight leading-[1.04] max-w-5xl"
+          initial={{ opacity: 0, y: 26, filter: 'blur(10px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 1.05, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight leading-[1.04] max-w-5xl text-white"
         >
           SEE THROUGH{' '}
-          <span className="bg-gradient-to-r from-white via-neutral-200 to-neutral-400 bg-clip-text text-transparent">
-            THE FAKE.
-          </span>
+          <motion.em
+            initial={{ opacity: 0.35, filter: 'blur(5px)' }}
+            animate={{ opacity: 1, filter: 'blur(0px)' }}
+            transition={{ duration: 1.15, delay: 0.52, ease: [0.16, 1, 0.3, 1] }}
+            className="font-editorial-italic text-[#b4b4bc] text-[1.09em] not-italic font-normal"
+            style={{ fontStyle: 'italic' }}
+          >
+            the fake.
+          </motion.em>
         </motion.h1>
 
         {/* Subheading */}
         <motion.p
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.1 }}
-          className="mt-6 text-base md:text-xl text-white/70 max-w-2xl font-normal leading-relaxed"
+          transition={{ duration: 1.0, delay: 0.45, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 mt-6 text-base md:text-xl text-[#9a9a9a] max-w-2xl font-normal leading-relaxed"
         >
           AI-powered digital authenticity and deepfake protection. Multi-spectral biometric tracking
           and forensic analysis built for the AI era.
         </motion.p>
 
+        {/* Hero CTAs (Liquid-Metal Solid + Frosted Ghost) */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 mt-8 flex flex-wrap items-center justify-center gap-3"
+        >
+          <button
+            onClick={() => {
+              setAuthMode('REGISTER')
+              setAuthModalOpen(true)
+            }}
+            className="px-6 py-3 rounded-xl text-sm font-semibold btn-liquid-metal inline-flex items-center gap-2 cursor-pointer"
+          >
+            <span>Start Protection</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+          <Link
+            href="/dashboard/live-scan"
+            className="px-6 py-3 rounded-xl text-sm font-medium pill-liquid-metal text-white inline-flex items-center gap-2 backdrop-blur-xl"
+          >
+            <Camera className="w-4 h-4 text-white/80" />
+            <span>Launch Live Scan</span>
+          </Link>
+        </motion.div>
+
         {/* ── THE 3D SCENE (With Floating Glass Cards, Curvilinear Ribbons, and Cursor Parallax) ── */}
-        <div className="w-full mt-6">
+        <div className="relative z-10 w-full mt-6">
           <Hero3DScene />
         </div>
+
+        {/* Agent Wave Crisp 3-Metric Strip */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.3 }}
+          transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 w-full max-w-4xl mt-6 pt-8 border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-6 text-left sm:text-center"
+        >
+          <div className="flex sm:flex-col items-center gap-3 sm:gap-1.5 px-4">
+            <div className="flex items-center gap-2 text-white font-mono text-sm font-bold tabular-nums">
+              <Zap className="w-4 h-4 text-white/80" />
+              <span>&lt; 12ms Inference</span>
+            </div>
+            <p className="text-xs text-[#9a9a9a]">On-device YuNet 5-landmark biometric tracking</p>
+          </div>
+
+          <div className="flex sm:flex-col items-center gap-3 sm:gap-1.5 px-4 sm:border-x border-white/10">
+            <div className="flex items-center gap-2 text-white font-mono text-sm font-bold tabular-nums">
+              <Layers className="w-4 h-4 text-white/80" />
+              <span>Dual-Scale 2D-FFT</span>
+            </div>
+            <p className="text-xs text-[#9a9a9a]">Real-time spectral moire &amp; replay defense</p>
+          </div>
+
+          <div className="flex sm:flex-col items-center gap-3 sm:gap-1.5 px-4">
+            <div className="flex items-center gap-2 text-white font-mono text-sm font-bold tabular-nums">
+              <ShieldCheck className="w-4 h-4 text-status-safe" />
+              <span>0 B Retained</span>
+            </div>
+            <p className="text-xs text-[#9a9a9a]">Volatile RAM buffers purged in milliseconds</p>
+          </div>
+        </motion.div>
       </section>
 
       {/* ── 3D INTERACTIVE FEATURE MATRICES (Section 19 & 30) ── */}
@@ -240,7 +342,7 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* Interactive 3D Cards Grid */}
+        {/* Interactive 3D Spotlight Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" style={{ perspective: '1000px' }}>
           {FEATURES.map((feat) => {
             const Icon = feat.icon
@@ -255,48 +357,57 @@ export default function LandingPage() {
                   transition: { duration: 0.25 },
                 }}
                 whileTap={{ scale: 0.96 }}
-                onClick={() => setSelectedFeature(feat)}
-                className="relative rounded-3xl p-6 glass-floating border border-white/12 shadow-glass hover:border-white/40 cursor-pointer overflow-hidden group text-left transition-colors"
+                className="h-full"
                 style={{ transformStyle: 'preserve-3d' }}
               >
-                {/* Background ambient corner flare */}
-                <div
-                  className="absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 group-hover:opacity-40 transition-opacity blur-2xl pointer-events-none"
-                  style={{ background: feat.color }}
-                />
-
-                <div className="relative z-10 space-y-4">
+                <SpotlightCard
+                  onClick={() => setSelectedFeature(feat)}
+                  spotlightColor={feat.color}
+                  intensity={0.18}
+                  spotlightSize={260}
+                  borderGlow={0.75}
+                  className="relative h-full !rounded-3xl !p-6 glass-floating border border-white/12 shadow-glass hover:border-white/40 cursor-pointer group text-left transition-colors"
+                  style={{ backgroundColor: 'rgba(10, 10, 10, 0.72)' }}
+                >
+                  {/* Background ambient corner flare */}
                   <div
-                    className="w-12 h-12 rounded-2xl flex items-center justify-center border shadow-sm transition-transform duration-300 group-hover:scale-110"
-                    style={{
-                      background: `${feat.color}15`,
-                      borderColor: `${feat.color}35`,
-                      color: feat.color,
-                    }}
-                  >
-                    <Icon className="w-6 h-6" />
-                  </div>
+                    className="absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 group-hover:opacity-40 transition-opacity blur-2xl pointer-events-none"
+                    style={{ background: feat.color }}
+                  />
 
-                  <div>
-                    <h3 className="text-lg font-bold text-white group-hover:text-white transition-colors">
-                      {feat.title}
-                    </h3>
-                    <p className="text-xs text-white/50 mt-1 font-mono">{feat.subtitle}</p>
-                  </div>
+                  <div className="relative z-10 space-y-4">
+                    <div
+                      className="w-12 h-12 rounded-2xl flex items-center justify-center border shadow-sm transition-transform duration-300 group-hover:scale-110"
+                      style={{
+                        background: `${feat.color}15`,
+                        borderColor: `${feat.color}35`,
+                        color: feat.color,
+                      }}
+                    >
+                      <Icon className="w-6 h-6" />
+                    </div>
 
-                  <p className="text-xs text-white/70 line-clamp-3 leading-relaxed">
-                    {feat.description}
-                  </p>
+                    <div>
+                      <h3 className="text-lg font-bold text-white group-hover:text-white transition-colors">
+                        {feat.title}
+                      </h3>
+                      <p className="text-xs text-white/50 mt-1 font-mono">{feat.subtitle}</p>
+                    </div>
 
-                  <div className="pt-2 flex items-center justify-between border-t border-white/6 text-xs">
-                    <span className="font-mono text-[10px] text-status-safe font-bold">
-                      {feat.liveState.split('·')[0]}
-                    </span>
-                    <span className="text-white font-semibold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                      Inspect <ArrowRight className="w-3.5 h-3.5" />
-                    </span>
+                    <p className="text-xs text-white/70 line-clamp-3 leading-relaxed">
+                      {feat.description}
+                    </p>
+
+                    <div className="pt-2 flex items-center justify-between border-t border-white/6 text-xs">
+                      <span className="font-mono text-[10px] text-status-safe font-bold">
+                        {feat.liveState.split('·')[0]}
+                      </span>
+                      <span className="text-white font-semibold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                        Inspect <ArrowRight className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
                   </div>
-                </div>
+                </SpotlightCard>
               </motion.div>
             )
           })}
@@ -514,17 +625,35 @@ export default function LandingPage() {
       </AnimatePresence>
 
       {/* ── ZERO-RETENTION PRIVACY PROMISE ── */}
-      <section id="architecture" className="py-20 px-4 md:px-8 max-w-7xl mx-auto w-full">
-        <div className="rounded-4xl glass-card p-8 md:p-12 border border-white/12 flex flex-col md:flex-row items-center justify-between gap-10">
-          <div className="text-left max-w-xl space-y-4">
+      <section id="architecture" className="py-20 px-4 md:px-8 max-w-7xl mx-auto w-full relative z-10">
+        <div className="relative overflow-hidden rounded-4xl glass-card p-8 md:p-12 border border-white/12 flex flex-col md:flex-row items-center justify-between gap-10">
+          {/* React Bits Forensic GridScan Background */}
+          <div className="absolute inset-0 pointer-events-none opacity-35">
+            <GridScan
+              linesColor="#27272a"
+              scanColor="#4ade80"
+              cells={10}
+              autoScan={true}
+              scanDuration={2.8}
+              scanDelay={1.6}
+              glow={0.55}
+              interactive={true}
+            />
+          </div>
+
+          <div className="relative z-10 text-left max-w-xl space-y-5">
             <GlassBadge status="neutral" label="ZERO DATA RETENTION ARCHITECTURE" />
             <h2 className="text-3xl md:text-4xl font-bold text-white">
-              Privacy First. Always On-Device.
+              Privacy First.{' '}
+              <span className="font-editorial-italic text-[#b4b4bc] text-[1.08em]">
+                Always On-Device.
+              </span>
             </h2>
-            <p className="text-sm text-white/70 leading-relaxed">
-              We never store camera streams or facial recordings without signed consent. Frame
-              buffers are processed in volatile memory and discarded within milliseconds.
-            </p>
+            <ScrollRevealText
+              text="We never store camera streams or facial recordings without signed consent. Frame buffers are processed in volatile memory and discarded within milliseconds."
+              highlightWords={['never', 'consent', 'volatile', 'milliseconds']}
+              className="text-base md:text-lg font-medium leading-relaxed tracking-tight"
+            />
             <div className="pt-2 flex items-center gap-6 text-xs text-white/80">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-status-safe" />
@@ -537,7 +666,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-4 w-full md:w-auto">
+          <div className="relative z-10 flex flex-col gap-4 w-full md:w-auto">
             <Link href="/dashboard/live-scan">
               <GlassButton variant="primary" size="lg" className="w-full">
                 Launch Live Viewfinder

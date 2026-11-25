@@ -29,6 +29,9 @@ import { GlassCard } from '@/components/ui/GlassCard'
 import { GlassButton } from '@/components/ui/GlassButton'
 import { GlassBadge } from '@/components/ui/GlassBadge'
 import { StatusIndicator } from '@/components/ui/StatusIndicator'
+import GridScan from '@/components/reactbits/GridScan'
+import DecryptedText from '@/components/reactbits/DecryptedText'
+import { AgentWaveCanvas } from '@/components/motion/AgentWaveCanvas'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -106,9 +109,12 @@ export default function DashboardPage() {
             <span className="text-xs text-white/40">Secure Session</span>
           </div>
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white">
-            {greeting}, {firstName}.
+            {greeting},{' '}
+            <span className="font-editorial-italic text-[#b4b4bc] text-[1.08em]">
+              {firstName}.
+            </span>
           </h1>
-          <p className="text-sm text-white/60 mt-1">Your digital protection is active.</p>
+          <p className="text-sm text-[#9a9a9a] mt-1">Your digital protection is active.</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -118,6 +124,7 @@ export default function DashboardPage() {
             onClick={handleRefresh}
             isLoading={refreshing}
             icon={<RefreshCw className="w-3.5 h-3.5" />}
+            className="pill-liquid-metal"
           >
             Refresh Telemetry
           </GlassButton>
@@ -126,7 +133,7 @@ export default function DashboardPage() {
               variant="primary"
               size="sm"
               icon={<Camera className="w-4 h-4" />}
-              className="shadow-[0_0_20px_rgba(255,255,255,0.2)]"
+              className="btn-liquid-metal"
             >
               Start Live Scan
             </GlassButton>
@@ -139,8 +146,20 @@ export default function DashboardPage() {
         variant="floating"
         className="relative overflow-hidden p-8 md:p-10 border border-white/14"
       >
-        {/* Ambient subtle glow background */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-white/[0.04] rounded-full blur-[90px] pointer-events-none" />
+        {/* Agent Wave Sinusoidal Waveform + React Bits Forensic GridScan */}
+        <AgentWaveCanvas className="absolute inset-0" opacity={0.35} speed={0.011} amplitude={26} />
+        <div className="absolute inset-0 pointer-events-none opacity-25">
+          <GridScan
+            linesColor="#27272a"
+            scanColor="#4ade80"
+            cells={10}
+            autoScan={true}
+            scanDuration={3.2}
+            scanDelay={2.2}
+            glow={0.45}
+            interactive={false}
+          />
+        </div>
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
           <div className="space-y-4 max-w-xl">
@@ -151,7 +170,12 @@ export default function DashboardPage() {
 
             <div>
               <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white">
-                PROTECTION ACTIVE
+                <DecryptedText
+                  text="PROTECTION ACTIVE"
+                  animateOn="view"
+                  sequential
+                  speed={40}
+                />
               </h2>
               <p className="text-sm font-medium text-white/80 mt-0.5">
                 Privacy-first analysis
